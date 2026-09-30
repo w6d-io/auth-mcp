@@ -1,0 +1,49 @@
+{
+  "name": "auth-mcp",
+  "version": "0.1.0",
+  "description": "example admin MCP server — acts as the user through a delegated Hydra token; jinbe/OPA decides every call",
+  "main": "dist/server.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "example",
+    "jinbe",
+    "hydra",
+    "oauth"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.12.5",
+    "pino": "^8.21.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.2",
+    "pino-pretty": "^10.3.1",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
