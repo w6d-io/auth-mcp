@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { allTools } from '../../mcp/tools/index.js'
@@ -10,7 +12,22 @@ import { CATALOG_PERMISSIONS, P, SCOPES_SUPPORTED } from '../../mcp/permissions.
  * alias, R-O1) is refused locally for every key and never reaches jinbe.
  */
 
-const JINBE_CATALOG = fileURLToPath(new URL('../../../../jinbe/src/policy/catalog.ts', import.meta.url))
+/**
+ * jinbe's catalogue: JINBE_REPO, else the jinbe clone beside this repo — beside the main clone when
+ * this runs in a git worktree (its common dir names the main clone).
+ */
+function jinbeCatalog(): string {
+  const rel = 'src/policy/catalog.ts'
+  const candidates = [process.env.JINBE_REPO ? join(process.env.JINBE_REPO, rel) : null, fileURLToPath(new URL(`../../../../jinbe/${rel}`, import.meta.url))]
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: dirname(fileURLToPath(import.meta.url)), encoding: 'utf8' }).trim()
+    candidates.push(join(dirname(dirname(common)), 'jinbe', rel))
+  } catch {
+    // not in git: the other candidates only
+  }
+  return candidates.find((c): c is string => !!c && existsSync(c)) ?? ''
+}
+const JINBE_CATALOG = jinbeCatalog()
 
 describe('tool permissions', () => {
   it('every tool requires only real catalogue permissions (or the mcp baseline)', () => {
@@ -26,7 +43,7 @@ describe('tool permissions', () => {
     }
   })
 
-  it.skipIf(!existsSync(JINBE_CATALOG))('the catalogue snapshot matches jinbe policy/catalog.ts', () => {
+  it.skipIf(!JINBE_CATALOG)('the catalogue snapshot matches jinbe policy/catalog.ts', () => {
     const src = readFileSync(JINBE_CATALOG, 'utf8')
     const body = src.slice(src.indexOf('export const CATALOG = {'), src.indexOf('} as const'))
     const names = [...body.matchAll(/^\s+'([a-z][a-z0-9_.-]*:[a-z][a-z0-9_-]*)':/gm)].map((m) => m[1])

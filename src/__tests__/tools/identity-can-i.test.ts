@@ -11,14 +11,14 @@ const DAY = 24 * 3600 * 1000
 const recent = new Date(Date.now() - 2 * DAY).toISOString()
 const old = new Date(Date.now() - 31 * DAY).toISOString()
 const key = (over: object = {}) =>
-  principal({ scopes: ['mcp', 'sites:read', 'sites:write', 'sites:apply', 'users:recovery'], kind: 'personal', keyId: 'key-1', keyStepUpAt: recent, keyStepUpActions: true, ...over })
+  principal({ scopes: ['mcp', 'sites:read', 'sites:write', 'sites:apply', 'users:recovery'], kind: 'personal', keyId: 'key-1', stepUpAt: recent, stepUpActions: true, ...over })
 
 describe('protectedActionsOf (the twin of jinbe keyStepUpVerdict)', () => {
   it.each([
-    ['a fresh key with protected actions', { kind: 'personal', keyStepUpAt: recent, keyStepUpActions: true }, true, undefined],
-    ['created with protected actions off', { kind: 'personal', keyStepUpAt: recent, keyStepUpActions: false }, false, 'key_created_without'],
-    ['on, but no factor proven at creation', { kind: 'personal', keyStepUpActions: true }, false, 'key_created_without'],
-    ['proof older than 30 days', { kind: 'personal', keyStepUpAt: old, keyStepUpActions: true }, false, 'proof_expired'],
+    ['a fresh key with protected actions', { kind: 'personal', stepUpAt: recent, stepUpActions: true }, true, undefined],
+    ['created with protected actions off', { kind: 'personal', stepUpAt: recent, stepUpActions: false }, false, 'key_created_without'],
+    ['on, but no factor proven at creation', { kind: 'personal', stepUpActions: true }, false, 'key_created_without'],
+    ['proof older than 30 days', { kind: 'personal', stepUpAt: old, stepUpActions: true }, false, 'proof_expired'],
     ['an OAuth connection', { kind: 'oauth' }, false, 'not_a_personal_key'],
     ['a jinbe that does not report it', { kind: 'personal' }, false, 'unknown'],
   ] as const)('%s', (_label, p, allowed, reason) => {
@@ -29,7 +29,7 @@ describe('protectedActionsOf (the twin of jinbe keyStepUpVerdict)', () => {
   })
 
   it('validUntil is the proof time plus 30 days', () => {
-    expect(protectedActionsOf({ kind: 'personal', keyStepUpAt: recent, keyStepUpActions: true }).validUntil).toBe(new Date(Date.parse(recent) + KEY_STEP_UP_MAX_AGE_MS).toISOString())
+    expect(protectedActionsOf({ kind: 'personal', stepUpAt: recent, stepUpActions: true }).validUntil).toBe(new Date(Date.parse(recent) + KEY_STEP_UP_MAX_AGE_MS).toISOString())
   })
 
   it('token-info claims are carried into the principal (ISO or epoch seconds)', () => {
@@ -37,11 +37,11 @@ describe('protectedActionsOf (the twin of jinbe keyStepUpVerdict)', () => {
     const base = { active: true, scope: 'mcp', client_id: 'key-1', sub: 'key-1', exp: now + 600, aud: 'https://mcp.test/mcp' }
     const ext = { kind: 'personal', subject: 'user-1', key_id: 'key-1', key_expires_at: now + 1000 }
     const iso = principalFromClaims({ ...base, ext: { ...ext, key_step_up_at: recent, key_step_up_actions: false } }, { resource: 'https://mcp.test/mcp', token: 't' })
-    expect(iso).toMatchObject({ keyStepUpAt: recent, keyStepUpActions: false })
+    expect(iso).toMatchObject({ stepUpAt: recent, stepUpActions: false })
     const epoch = principalFromClaims({ ...base, ext: { ...ext, key_step_up_at: now } }, { resource: 'https://mcp.test/mcp', token: 't' })
-    expect(epoch.keyStepUpAt).toBe(new Date(now * 1000).toISOString())
+    expect(epoch.stepUpAt).toBe(new Date(now * 1000).toISOString())
     const none = principalFromClaims({ ...base, ext }, { resource: 'https://mcp.test/mcp', token: 't' })
-    expect('keyStepUpAt' in none || 'keyStepUpActions' in none).toBe(false)
+    expect('stepUpAt' in none || 'stepUpActions' in none).toBe(false)
   })
 })
 
@@ -92,7 +92,7 @@ describe('can_i: no side effects, the refusal it would get', () => {
   })
 
   it.each([
-    ['protected_actions_off', key({ keyStepUpActions: false }), 'publish_site', undefined],
+    ['protected_actions_off', key({ stepUpActions: false }), 'publish_site', undefined],
     ['insufficient_scope', key({ scopes: ['mcp', 'sites:read'] }), 'save_site_draft', undefined],
     ['self_target_refused', key(), 'send_recovery_email', { userId: 'user-1' }],
     ['invalid_request', key(), 'get_site', { name: '../x' }],
@@ -107,7 +107,7 @@ describe('can_i: no side effects, the refusal it would get', () => {
   it('names the missing permissions and why protected actions are off', async () => {
     const { data } = await ask(key({ scopes: ['mcp'] }), 'publish_site')
     expect(data).toMatchObject({ needs: ['sites:apply'], wouldRefuseBecause: 'insufficient_scope' })
-    const expired = await ask(key({ keyStepUpAt: old }), 'change_user_email')
+    const expired = await ask(key({ stepUpAt: old }), 'change_user_email')
     expect(expired.data).toMatchObject({ protectedActionsAllowed: false, protectedActionsReason: 'proof_expired' })
   })
 

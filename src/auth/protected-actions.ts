@@ -18,16 +18,18 @@ export interface ProtectedActions {
   reason?: ProtectedReason
   /** When the key's second-factor proof stops standing in (allowed, or expired at). */
   validUntil?: string
+  /** What to do to get them (e.g. sign in again), when not allowed. */
+  guidance?: string
   covers: string[]
 }
 
-export function protectedActionsOf(p: Pick<Principal, 'kind' | 'keyStepUpAt' | 'keyStepUpActions'>, now = Date.now()): ProtectedActions {
+export function protectedActionsOf(p: Pick<Principal, 'kind' | 'stepUpAt' | 'stepUpActions'>, now = Date.now()): ProtectedActions {
   const covers = [...PROTECTED_PERMISSIONS]
   if (p.kind !== 'personal') return { allowed: false, reason: 'not_a_personal_key', covers }
-  if (p.keyStepUpActions === false) return { allowed: false, reason: 'key_created_without', covers }
+  if (p.stepUpActions === false) return { allowed: false, reason: 'key_created_without', covers }
   // Neither field reported: a jinbe older than token-info's key_step_up_* claims. Not guessed.
-  if (p.keyStepUpActions === undefined && p.keyStepUpAt === undefined) return { allowed: false, reason: 'unknown', covers }
-  const at = p.keyStepUpAt ? Date.parse(p.keyStepUpAt) : NaN
+  if (p.stepUpActions === undefined && p.stepUpAt === undefined) return { allowed: false, reason: 'unknown', covers }
+  const at = p.stepUpAt ? Date.parse(p.stepUpAt) : NaN
   // Protected actions on, but no factor proven at creation: nothing to stand in (jinbe no_key_step_up).
   if (!Number.isFinite(at)) return { allowed: false, reason: 'key_created_without', covers }
   const validUntil = new Date(at + KEY_STEP_UP_MAX_AGE_MS).toISOString()

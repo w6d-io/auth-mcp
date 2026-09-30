@@ -24,8 +24,8 @@ export interface Principal {
    * was created with protected actions allowed. From jinbe token-info `ext.key_step_up_at` /
    * `ext.key_step_up_actions`; undefined when jinbe does not report them (older jinbe).
    */
-  keyStepUpAt?: string | null
-  keyStepUpActions?: boolean
+  stepUpAt?: string | null
+  stepUpActions?: boolean
   /** Access-token expiry (epoch seconds). */
   expiresAt: number
   /** sha256 of the access token, for cache keys and correlation; never the token itself. */

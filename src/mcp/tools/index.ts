@@ -1,5 +1,6 @@
 import type { ToolDef } from '../registry.js'
-import { identityTools, makeCanI } from './identity.js'
+import { identityTools } from './identity.js'
+import { makeCanI } from './can-i.js'
 import { siteTools } from './sites.js'
 import { iamTools } from './iam.js'
 import { orgTools } from './orgs.js'

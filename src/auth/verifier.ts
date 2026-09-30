@@ -92,14 +92,14 @@ export function principalFromClaims(
 }
 
 /** A personal key's step-up facts, only when jinbe reports them (an absent field stays absent: unknown). */
-function stepUpClaims(ext: NonNullable<IntrospectionClaims['ext']>): Pick<Principal, 'keyStepUpAt' | 'keyStepUpActions'> {
-  const out: Pick<Principal, 'keyStepUpAt' | 'keyStepUpActions'> = {}
+function stepUpClaims(ext: NonNullable<IntrospectionClaims['ext']>): Pick<Principal, 'stepUpAt' | 'stepUpActions'> {
+  const out: Pick<Principal, 'stepUpAt' | 'stepUpActions'> = {}
   const at = ext.key_step_up_at
   // ISO string, or epoch seconds like the other ext times.
-  if (typeof at === 'string' && Number.isFinite(Date.parse(at))) out.keyStepUpAt = new Date(Date.parse(at)).toISOString()
-  else if (typeof at === 'number' && Number.isFinite(at)) out.keyStepUpAt = new Date(at * 1000).toISOString()
-  else if (at === null) out.keyStepUpAt = null
-  if (typeof ext.key_step_up_actions === 'boolean') out.keyStepUpActions = ext.key_step_up_actions
+  if (typeof at === 'string' && Number.isFinite(Date.parse(at))) out.stepUpAt = new Date(Date.parse(at)).toISOString()
+  else if (typeof at === 'number' && Number.isFinite(at)) out.stepUpAt = new Date(at * 1000).toISOString()
+  else if (at === null) out.stepUpAt = null
+  if (typeof ext.key_step_up_actions === 'boolean') out.stepUpActions = ext.key_step_up_actions
   return out
 }
 
