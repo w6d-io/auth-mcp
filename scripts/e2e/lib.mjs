@@ -16,6 +16,8 @@ export const CFG = {
   ns: env.E2E_NAMESPACE || 'auth-dev',
   run: env.E2E_RUN_ID || '',
   mcpUrl: env.E2E_MCP_URL || 'https://mcp.authdev.dev.example.com/mcp',
+  // Byte-equal to auth-mcp's HYDRA_ISSUER and jinbe's MCP_OAUTH_ISSUER (trailing slash included).
+  issuer: env.E2E_OAUTH_ISSUER || 'https://hydra.authdev.dev.example.com/',
   jinbeUrl: (env.E2E_JINBE_URL || 'https://kuma.authdev.dev.example.com').replace(/\/$/, ''),
   kratosUrl: (env.E2E_KRATOS_URL || 'https://auth.authdev.dev.example.com').replace(/\/$/, ''),
   emailDomain: env.E2E_EMAIL_DOMAIN || 'example.com',
