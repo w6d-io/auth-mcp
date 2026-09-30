@@ -121,6 +121,7 @@ const NEVER = [
   'reset a second factor, create a key, approve or reject a request',
   'export the policy bundle or the audit trail, or change it wholesale',
   'change your own account or groups',
+  'turn a group\'s "Members must use 2FA" switch on or off (a super admin, in the console)',
 ]
 
 const PROTECTED_NOTE =
