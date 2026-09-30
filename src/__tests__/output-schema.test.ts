@@ -27,7 +27,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   render_template: { template: '{{ .Subject }}', kind: 'header', sample: { method: 'GET', url: 'https://billing.example.com/x' } },
   list_groups: {}, list_services: {}, list_roles: { service: 'billing' }, get_permission_catalog: { service: 'billing' },
   explain_access: { email: 'bob@example.com', method: 'GET', path: '/x' }, get_user_access: { userId: USER }, find_users: { query: 'bob' },
-  search_audit: {}, get_audit_event: { eventId: EVENT },
+  search_audit: {}, get_audit_event: { eventId: EVENT }, explain_admin_access: { method: 'GET', path: '/api/admin/users' },
   get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_grants: { org: ORG },
   create_site: { name: 'fresh', displayName: 'Fresh', host: 'fresh.example.com', upstream: { service: 'fresh', namespace: 'fresh', port: 80 } },
   save_site_draft: { name: 'billing', site: { name: 'billing' } },

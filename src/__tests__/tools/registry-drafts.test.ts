@@ -41,7 +41,7 @@ describe('visibility (UX pre-filter)', () => {
   it('lists only what the scopes carry', () => {
     const server = new McpServer({ name: 't', version: '0' })
     const names = registerTools(server, readTools, principal({ scopes: ['mcp'] }), d)
-    expect(names.sort()).toEqual(['get_my_identity', 'get_my_permissions', 'list_orgs'])
+    expect(names.sort()).toEqual(['explain_admin_access', 'get_my_identity', 'get_my_permissions', 'list_orgs'])
   })
 
   it('hides unwired stubs unless exposed, and writes in read-only mode', () => {

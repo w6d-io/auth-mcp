@@ -24,6 +24,7 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Could this key publish the site "billing" right now?', tools: ['can_i'] },
   { ask: 'Which of my actions need a second factor, and which can this connection do?', tools: ['get_my_identity'] },
   { ask: 'Where is a second factor required on this platform?', tools: ['get_second_factor_map'] },
+  { ask: 'Why can\'t I list the members of my organisation?', tools: ['list_orgs', 'explain_admin_access'] },
   { ask: 'List the sites and tell me which ones need attention.', tools: ['list_sites'] },
   { ask: 'Show the site "billing" and its version history.', tools: ['get_site', 'site_versions'] },
   { ask: 'What would break if the site "shop" went down?', tools: ['blast_radius'] },

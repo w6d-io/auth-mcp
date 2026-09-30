@@ -294,6 +294,7 @@ prompt `getting-started`: each tool is marked as available or not for *your* key
 | `set_site_roles` | Replace a service's roles and their permissions (protected) | `groups:write` |
 | `plan_bulk` / `execute_bulk` / `get_bulk_job` | Dry-run, run and follow up to 200 items of one op: `sites.routes.upsert`, `users.invite`, `users.verification`, `groups.members.add` | the op's permission |
 | `revoke_my_key` | Revoke one of your own keys (default: this one) | any connection |
+| `explain_admin_access` | Why a call to the platform API is allowed or refused: guard by guard, policy input, disagreements | any connection (others: `access:check`) |
 | `get_second_factor_map` | Every second-factor rule: sign-in groups, step-up permissions, roles, sites | `groups:read` or `sites:read` |
 | `extend_site_ttl` | Move an ephemeral site's expiry (it is paused, never deleted, when it passes) | `sites:write` |
 | `request_site_deletion` | Ask for a site to be deleted; another person with `sites:delete` approves in the console | `sites:write` |

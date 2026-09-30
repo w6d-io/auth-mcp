@@ -149,6 +149,9 @@ const UPSTREAM_CODES: Record<string, ToolErrorCode> = {
   privilege_escalation_blocked: 'forbidden',
   // A group whose "Members must use 2FA" switch is on refuses a person with no second factor.
   mfa_required: 'mfa_required',
+  // requireServiceAdmin refusals (jinbe wave19/admin-explain): the grant-guard shape, OPA's reason.
+  needs_2fa: 'needs_2fa',
+  route_not_published: 'not_found',
 }
 
 /** Codes whose hint is jinbe's own when it sends one: it names the groups that grant what is missing. */

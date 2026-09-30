@@ -31,6 +31,7 @@ export interface SiteDetail {
   applied: { version: number; at: string; by: string; rules: string[] } | null
   ephemeral?: Record<string, unknown> | null
   secondFactor?: Record<string, unknown> | null
+  resolvedGates?: unknown
 }
 
 export interface SiteCheck {
@@ -65,6 +66,7 @@ export interface SitePreview {
   findings?: SiteFinding[]
   /** blocked: any error finding; acknowledge: the distinct codes of the confirm findings. */
   publish?: { blocked: boolean; acknowledge: string[] }
+  resolvedGates?: unknown
 }
 
 /** GET /api/admin/sites/:name/blast-radius — apply.service.ts blastRadius. */
@@ -99,7 +101,7 @@ export interface AccessCheck {
 /** GET /api/admin/users/:id/access. */
 export interface UserAccess {
   site: { groups: string[]; byService: Record<string, string[]> }
-  orgs: Array<{ orgId: string; name: string; admin: boolean; grants: string[] }>
+  orgs: Array<{ orgId: string; name: string; admin: boolean; rostered?: boolean; why?: string; grants: string[] }>
 }
 
 /** GET /api/admin/users/lookup. */

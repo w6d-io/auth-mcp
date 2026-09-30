@@ -47,7 +47,7 @@ export const listSites = defineTool({
 export const getSite = defineTool({
   name: 'get_site',
   title: 'Get a site',
-  description: "One site: its saved intent (address, upstream, gates, routes, roles, groups, login), version, etag, applied state, its login second factor (which routes need one) and, for an ephemeral site, its expiry.",
+  description: "One site: its saved intent (address, upstream, gates, routes, roles, groups, login), version, etag, applied state, its login second factor (which routes need one), the resolved gate config (each handler's effective settings, every field marked explicit or platform default) and, for an ephemeral site, its expiry.",
   scopes: [P.SITES_READ],
   input: { name: siteName },
   async run(args, { jinbe, call }) {
@@ -60,6 +60,8 @@ export const getSite = defineTool({
         status: s.status,
         savedAt: s.savedAt,
         applied: s.applied ? { version: s.applied.version, at: s.applied.at, rules: s.applied.rules.length } : null,
+        // Each rendered gate's handlers with the effective config, every field marked explicit or default (jinbe wave19).
+        ...(s.resolvedGates !== undefined ? { resolvedGates: s.resolvedGates } : {}),
         // The site's login second factor (jinbe wave19): {scope, routes, clients, minAal, summary}.
         ...(s.secondFactor !== undefined ? { secondFactor: s.secondFactor } : {}),
         // Ephemeral sites (jinbe wave19): {ttlSec, expiresAt, remainingSec, expired} or null (permanent).
@@ -135,6 +137,7 @@ export const checkSiteDraft = defineTool({
           ...(p.suggestedZone ? { suggestedZone: p.suggestedZone } : {}),
           ...(p.findings ? { findings: p.findings } : {}),
           ...(p.publish ? { publish: p.publish } : {}),
+          ...(p.resolvedGates !== undefined ? { resolvedGates: p.resolvedGates } : {}),
         }
         if (p.publish?.blocked) notes.push('Publishing is blocked: fix every finding of level error first (each says how in fix).')
         if (p.publish?.acknowledge?.length) {

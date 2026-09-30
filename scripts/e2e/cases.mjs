@@ -341,6 +341,21 @@ export const CASES = [
       return { pass: problems.length === 0, got: problems.join('; ') || `ok (${sf.actionsNeedingIt.length} of my actions need a second factor)` }
     } },
 
+  // ── Explaining platform API access (jinbe wave19/admin-explain) ──
+  { id: 'R-EX', actor: 'developer, admin', title: 'explain_admin_access: a key explains its own refused publish; an admin explains it for the developer; get_site shows the resolved gate config', expect: 'refused by the delegation gate (scope); same for the admin view; resolvedGates marks explicit/default',
+    async run(c) {
+      const problems = []
+      const path = `/api/admin/sites/${c.site}/apply`
+      const own = await c.mcp.developer.call('explain_admin_access', { method: 'POST', path, body: { version: 1 } })
+      if (!own.ok || own.data?.verdict?.allowed !== false || own.data?.decidedBy !== 'delegationGate') problems.push(`own: ${own.ok ? `${own.data?.decidedBy} ${own.data?.verdict?.code}` : own.code}`)
+      const asAdmin = await c.mcp.admin.call('explain_admin_access', { method: 'POST', path, subject: c.targets.t1.email, via: 'session', aal: 'aal2' })
+      if (!asAdmin.ok || asAdmin.data?.verdict?.allowed !== false) problems.push(`admin view of t1: ${asAdmin.ok ? JSON.stringify(asAdmin.data?.verdict) : asAdmin.code}`)
+      const site = await c.mcp.ops.call('get_site', { name: c.site })
+      const fields = site.data?.resolvedGates?.[0]?.handlers?.[0]?.fields
+      if (!site.ok || !fields || !Object.values(fields).every((v) => v === 'explicit' || v === 'default')) problems.push(`resolvedGates ${site.ok ? JSON.stringify(site.data?.resolvedGates)?.slice(0, 80) : site.code}`)
+      return { pass: problems.length === 0, got: problems.join('; ') || `ok (own: ${own.data.verdict.code ?? own.data.verdict.status} by ${own.data.decidedBy})` }
+    } },
+
   // ── Adversarial ──
   { id: 'A3', actor: 'admin (raw jinbe)', title: 'jinbe gate, MCP bypassed: deletes, membership removal, key mint, 2FA reset, zones, gateway, settings, self-grant', expect: '403 delegation_ineligible:<why> each; mint-key any 403 (its own guard answers first); 400/422 = inconclusive (validation ran first)',
     async run(c) {

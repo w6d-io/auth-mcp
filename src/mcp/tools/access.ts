@@ -49,6 +49,12 @@ function stepUpNote(data: AccessCheck): string {
   return `Would be allowed at aal2 (second factor): ${why}. The only failing condition is the sign-in level, not a permission. Call again with aal "aal2" to confirm.`
 }
 
+const WHY: Record<string, string> = {
+  not_a_member_per_policy: 'the policy does not count them as a member',
+  email_case_mismatch: 'the roster spells their email with a different case',
+  policy_not_yet_loaded: 'the policy has not loaded the roster yet; retry shortly',
+}
+
 export const getUserAccess = defineTool({
   name: 'get_user_access',
   title: "A person's access",
@@ -57,7 +63,11 @@ export const getUserAccess = defineTool({
   input: { userId: z.string().regex(IDENTITY_ID, 'an identity id (find_users gives it)') },
   async run(args, { jinbe, call }) {
     const data = await jinbe.get<UserAccess>(call, `/api/admin/users/${seg(args.userId)}/access`)
-    return { data, source: 'jinbe:/api/admin/users/:id/access' }
+    // Rostered in jinbe but not an admin to the policy: say why (jinbe wave19/admin-explain).
+    const notes = (data.orgs ?? [])
+      .filter((o) => o.rostered && !o.admin && o.why)
+      .map((o) => `${o.name || o.orgId}: on the organisation's admin roster but not an admin to the policy (${WHY[o.why as string] ?? o.why}).`)
+    return { data, source: 'jinbe:/api/admin/users/:id/access', notes }
   },
 })
 

@@ -136,7 +136,7 @@ describe('#8 output leak scan', () => {
     render_template: { template: leak, kind: 'header', sample: { method: 'GET', url: 'https://a.example.com/' } },
     list_roles: { service: 'leaky' }, get_permission_catalog: { service: 'leaky' },
     explain_access: { email: 'a@b.test', method: 'GET', path: '/' }, get_user_access: { userId: 'u' },
-    find_users: { query: 'a' }, get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_grants: { org: ORG }, get_audit_event: { eventId: '0b7f7c2e-6a6c-4a55-9d4e-2f5b8f7e9a10' },
+    find_users: { query: 'a' }, explain_admin_access: { method: 'GET', path: '/api/admin/users' }, get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_grants: { org: ORG }, get_audit_event: { eventId: '0b7f7c2e-6a6c-4a55-9d4e-2f5b8f7e9a10' },
   }
 
   it.each(readTools.map((t) => [t.name, t] as const))('%s leaks nothing secret-shaped', async (_name, tool) => {
