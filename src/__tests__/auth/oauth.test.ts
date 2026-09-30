@@ -87,3 +87,13 @@ describe('token-info refusals the person can act on', () => {
     await expect(v.verify('ory_at_x')).rejects.toMatchObject({ code: 'invalid_token', message: expect.stringMatching(/sign in again/) })
   })
 })
+
+describe('browser sign-in switched off by an administrator', () => {
+  it('403 mcp_disabled oauth_disabled says to use a personal key (not a 401: re-signing in cannot help)', async () => {
+    const { JinbeTokenInfoVerifier } = await import('../../auth/verifier.js')
+    const { StaticActorTokenSource } = await import('../../auth/actor-token.js')
+    const v = new JinbeTokenInfoVerifier('http://jinbe.test', RESOURCE, new StaticActorTokenSource('a'), (async () =>
+      new Response(JSON.stringify({ error: 'mcp_disabled', reason: 'oauth_disabled' }), { status: 403 })) as never)
+    await expect(v.verify('ory_at_x')).rejects.toMatchObject({ code: 'mcp_disabled', message: expect.stringMatching(/Browser sign-in is turned off.*personal key/) })
+  })
+})

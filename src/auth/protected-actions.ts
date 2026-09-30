@@ -52,9 +52,15 @@ function forOAuth(p: Facts, now: number, covers: string[]): ProtectedActions {
   // Not reported at all: a jinbe older than the OAuth consent facts. Not guessed.
   if (p.stepUpActions === undefined) return { allowed: false, reason: 'unknown', covers }
   const until = p.stepUpUntil ? Date.parse(p.stepUpUntil) : NaN
-  // Ticked at consent, but jinbe sends no step_up_until: an administrator turned the window off.
+  // Ticked at consent, but jinbe sends no step_up_until: an administrator turned protected actions off
+  // for browser sign-ins, or no second-factor time was recorded at consent.
   if (!Number.isFinite(until)) {
-    return { allowed: false, reason: 'disabled_by_admin', guidance: 'Protected actions through a browser sign-in are turned off by an administrator: do them in the console.', covers }
+    return {
+      allowed: false,
+      reason: 'disabled_by_admin',
+      guidance: `Not available on this sign-in: an administrator turned protected actions off for browser sign-ins, or no second factor was recorded. ${REAUTH_GUIDANCE} If it stays off, do them in the console.`,
+      covers,
+    }
   }
   const validUntil = new Date(until).toISOString()
   if (until <= now) return { allowed: false, reason: 'proof_expired', validUntil, guidance: REAUTH_GUIDANCE, covers }

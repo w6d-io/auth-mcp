@@ -65,8 +65,14 @@ export class AuthError extends Error {
 export const MCP_OFF_MESSAGE = 'MCP access is turned off by an administrator'
 const MCP_ORG_OFF_MESSAGE = 'MCP access is turned off for this organization by an administrator'
 const MCP_GROUP_OFF_MESSAGE = 'MCP access is not enabled for your groups by an administrator'
+const MCP_OAUTH_OFF_MESSAGE = 'Browser sign-in is turned off by an administrator: connect with a personal key instead'
 
-const OFF_MESSAGES: Record<string, string> = { org_not_allowed: MCP_ORG_OFF_MESSAGE, group_not_allowed: MCP_GROUP_OFF_MESSAGE }
+const OFF_MESSAGES: Record<string, string> = {
+  org_not_allowed: MCP_ORG_OFF_MESSAGE,
+  group_not_allowed: MCP_GROUP_OFF_MESSAGE,
+  // Settings → AI assistants: browser sign-in off while MCP stays on (personal keys keep working).
+  oauth_disabled: MCP_OAUTH_OFF_MESSAGE,
+}
 
 /**
  * jinbe's 403 `{error: 'mcp_disabled', reason}` (token-info, key exchange): an administrator turned MCP
