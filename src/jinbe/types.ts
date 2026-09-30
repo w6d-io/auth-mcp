@@ -30,6 +30,7 @@ export interface SiteDetail {
   savedBy: string
   applied: { version: number; at: string; by: string; rules: string[] } | null
   ephemeral?: Record<string, unknown> | null
+  secondFactor?: Record<string, unknown> | null
 }
 
 export interface SiteCheck {
@@ -135,6 +136,19 @@ export interface MyPermissions {
   roles: string[]
   permissions: string[]
   actions?: Record<string, boolean>
+  /** jinbe wave19: the caller's second-factor picture (requiredBecause, enrolled, currentAal, factorAgeMin, stepUpFresh, stepUpPermissions). */
+  secondFactor?: SecondFactorPicture | null
+}
+
+export interface SecondFactorPicture {
+  required?: boolean
+  requiredBecause?: string[]
+  enrolled?: boolean | null
+  methods?: string[] | null
+  currentAal?: string | null
+  factorAgeMin?: number | null
+  stepUpFresh?: boolean | null
+  stepUpPermissions?: string[] | null
 }
 
 /** GET /api/admin/rbac/groups. */

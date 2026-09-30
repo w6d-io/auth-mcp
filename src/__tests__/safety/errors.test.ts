@@ -105,3 +105,30 @@ describe('grant guard refusals (jinbe permission-refusal.ts)', () => {
     expect(fromJinbe(409, { error: 'conflict', hint: 'jinbe says' }).body.hint).not.toBe('jinbe says')
   })
 })
+
+describe('second-factor refusals (jinbe wave19 2FA visibility)', () => {
+  const refusal = (keyReason: string) => ({
+    error: 'step_up_unavailable', message: 'needs a browser', hint: `jinbe hint for ${keyReason}`, permission: 'sites:apply',
+    secondFactor: { rule: 'step_up', requiredAal: 'aal2', maxAgeMin: 15, keyReason },
+  })
+
+  it.each([
+    ['key_step_up_expired', 'protected_actions_off', /older than 30 days/],
+    ['no_key_step_up', 'protected_actions_off', /no second-factor proof/],
+    ['step_up_actions_off', 'protected_actions_off', /protected actions off/],
+    ['not_allowed_here', 'needs_2fa', /do it in the console/],
+    ['not_personal_key', 'needs_2fa', /do it in the console/],
+  ])('%s → %s', (keyReason, code, message) => {
+    const e = fromJinbe(422, refusal(keyReason))
+    expect(e.body.code).toBe(code)
+    expect(e.body.message).toMatch(message)
+    expect(e.body.hint).toBe(`jinbe hint for ${keyReason}`)
+    expect(e.body.details).toMatchObject({ permission: 'sites:apply', secondFactor: { rule: 'step_up', keyReason } })
+    expect(e.body.retryable).toBe(false)
+  })
+
+  it('a sign-in rule refusal keeps its rule and groups', () => {
+    const e = fromJinbe(422, { error: 'second_factor_required', message: 'enrol', hint: 'Set up two-step sign-in', secondFactor: { rule: 'group_sign_in', requiredAal: 'aal2', requiredBecause: ['ops'] } })
+    expect(e.body).toMatchObject({ code: 'second_factor_required', hint: 'Set up two-step sign-in', details: { secondFactor: { rule: 'group_sign_in', requiredBecause: ['ops'] } } })
+  })
+})

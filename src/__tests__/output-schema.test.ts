@@ -21,7 +21,7 @@ const route = { id: 'list', methods: ['GET'], path: '/api/items', gate: 'api', a
 
 /** Valid arguments for every tool (the test fails if a tool is missing here). */
 const ARGS: Record<string, Record<string, unknown>> = {
-  get_my_identity: {}, get_my_permissions: {}, list_orgs: {}, can_i: { tool: 'publish_site', arguments: { name: 'billing' } },
+  get_my_identity: {}, get_my_permissions: {}, list_orgs: {}, get_second_factor_map: {}, can_i: { tool: 'publish_site', arguments: { name: 'billing' } },
   list_sites: {}, get_site: { name: 'billing' }, site_versions: { name: 'billing' }, blast_radius: { name: 'billing' }, get_platform: {},
   check_site_draft: { site: { name: 'billing' } }, match_request: { method: 'GET', url: 'https://billing.example.com/x' },
   render_template: { template: '{{ .Subject }}', kind: 'header', sample: { method: 'GET', url: 'https://billing.example.com/x' } },

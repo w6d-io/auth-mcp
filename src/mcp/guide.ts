@@ -22,6 +22,8 @@ const kindOf = (t: ToolDef) => (!t.write ? 'read' : t.protectedAction ? 'protect
 export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Who am I connected as, and what can this key do?', tools: ['get_my_identity', 'get_my_permissions'] },
   { ask: 'Could this key publish the site "billing" right now?', tools: ['can_i'] },
+  { ask: 'Which of my actions need a second factor, and which can this connection do?', tools: ['get_my_identity'] },
+  { ask: 'Where is a second factor required on this platform?', tools: ['get_second_factor_map'] },
   { ask: 'List the sites and tell me which ones need attention.', tools: ['list_sites'] },
   { ask: 'Show the site "billing" and its version history.', tools: ['get_site', 'site_versions'] },
   { ask: 'What would break if the site "shop" went down?', tools: ['blast_radius'] },
@@ -130,6 +132,7 @@ const TROUBLESHOOTING: ReadonlyArray<[string, string]> = [
   ['503 retry_later', 'The platform could not check the key or your permissions just now (authz_unavailable). Retry shortly.'],
   ['tool error insufficient_scope', 'The key was created with chosen permissions that do not cover this tool.'],
   ['tool error forbidden', 'Your account does not hold the permission.'],
+  ['tool error needs_2fa', 'The action needs a second factor proven in a browser and no connection can stand in for it: do it in the console. `details.secondFactor.rule` names the rule.'],
   ['tool error route_not_declared', 'The platform does not know this endpoint yet: it is older than this MCP server, or the route is not deployed. Not a ban: retry once the platform is updated.'],
   ['tool error never_via_mcp', 'The action is never allowed through a key (see above). Do it in the console.'],
   ['tool error protected_actions_off', 'A protected write, and this connection may not do protected actions now: `get_my_identity` says why (a key created without them or older than 30 days: create a new key allowing them; a browser sign-in without them or past 12 hours: /mcp → Re-authenticate and tick them).'],

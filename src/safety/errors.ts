@@ -33,6 +33,7 @@ export type ToolErrorCode =
   | 'unconfirmed_findings'
   | 'route_not_declared'
   | 'grant_exceeds_own'
+  | 'needs_2fa'
   | 'staff_group_super_admin_only'
   | 'internal_error'
 
@@ -78,6 +79,8 @@ const HINTS: Partial<Record<ToolErrorCode, string>> = {
   protected_actions_off:
     'This is a protected action (publish, change an email, add to groups, edit groups and roles). A personal key: create a new key with protected actions allowed. A browser sign-in: /mcp → example → Re-authenticate and tick "Allow protected actions" (they last 12 hours). get_my_identity says which applies.',
   idempotency_key_reused: 'This idempotencyKey was used for a different request. Use a new key (or omit it) for a new change.',
+  needs_2fa:
+    'This action needs a second factor proven in a browser, and this connection cannot stand in for it: do it in the console. details.secondFactor names the rule.',
   grant_exceeds_own:
     'You may only hand out what you hold yourself. details.missing lists what this grant exceeds, details.grantedBy the groups that hold it: ask an administrator.',
   staff_group_super_admin_only: 'Staff groups and super_admins are changed by a super admin only. Ask one; do not retry.',
@@ -144,7 +147,25 @@ const UPSTREAM_CODES: Record<string, ToolErrorCode> = {
 }
 
 /** Codes whose hint is jinbe's own when it sends one: it names the groups that grant what is missing. */
-const JINBE_HINTED = new Set<ToolErrorCode>(['forbidden', 'insufficient_scope', 'grant_exceeds_own', 'staff_group_super_admin_only'])
+const JINBE_HINTED = new Set<ToolErrorCode>([
+  'forbidden', 'insufficient_scope', 'grant_exceeds_own', 'staff_group_super_admin_only',
+  // Second-factor refusals: jinbe's hint says what to do for THIS credential (keyReason).
+  'protected_actions_off', 'needs_2fa', 'second_factor_required', 'reauth_required',
+])
+
+/**
+ * A step-up refusal to a delegated caller names why the credential cannot stand in (jinbe
+ * secondFactor.keyReason). Some are fixable with a new key or a new sign-in (protected_actions_off);
+ * the others mean the action is console-only with a second factor (needs_2fa).
+ */
+const CONSOLE_ONLY_KEY_REASONS = new Set(['not_allowed_here', 'not_personal_key'])
+const KEY_REASON_MESSAGES: Record<string, string> = {
+  key_step_up_expired: 'The second factor this key stands on is older than 30 days: create a new personal key, or do this in the console',
+  no_key_step_up: 'This key carries no second-factor proof: create a new personal key after signing in with your second factor',
+  step_up_actions_off: 'This key was created with protected actions off: create a key that allows them, or do this in the console',
+  not_allowed_here: 'This action needs a second factor proven in a browser: no connection may stand in for it here, do it in the console',
+  not_personal_key: 'This action needs a second factor proven in a browser: do it in the console',
+}
 
 const RETRYABLE = new Set<ToolErrorCode>(['rate_limited', 'retry_later', 'organisation_directory_unavailable', 'upstream_unavailable'])
 
@@ -192,6 +213,8 @@ function upstreamDetails(body: unknown): unknown {
     'checks', 'issues', 'details', 'refused', 'ties', 'sites', 'stepUp', 'etag', 'approve_url', 'plan', 'findings',
     // A permission refusal: what is missing and which groups grant it (group names, never members).
     'permission', 'missing', 'missingByScope', 'grantedBy', 'blockingGroup',
+    // A second-factor refusal: {rule, requiredAal, maxAgeMin, requiredBecause, groups, keyReason}.
+    'secondFactor',
   ]) {
     if (b[k] !== undefined) picked[k] = b[k]
   }
@@ -270,9 +293,13 @@ export function fromJinbe(status: number, body: unknown, retryAfter?: string | n
     code = 'rate_limited'
     message = 'The Kubernetes API is temporarily rate-limited, nothing was changed; retry in a few seconds'
   }
-  if (code === 'protected_actions_off') {
-    // jinbe's text says "prove it in a browser", which a key-holder cannot act on from here.
-    message = 'This is a protected action and this connection may not do it now: create a new key with protected actions allowed, or (browser sign-in) sign in again and allow them'
+  const keyReason = (body as { secondFactor?: { keyReason?: unknown } } | null)?.secondFactor?.keyReason
+  if (code === 'protected_actions_off' && typeof keyReason === 'string' && CONSOLE_ONLY_KEY_REASONS.has(keyReason)) code = 'needs_2fa'
+  if (code === 'protected_actions_off' || code === 'needs_2fa') {
+    // jinbe's generic text says "prove it in a browser"; the key reason says what THIS connection can do.
+    message =
+      (typeof keyReason === 'string' && KEY_REASON_MESSAGES[keyReason]) ||
+      'This is a protected action and this connection may not do it now: create a new key with protected actions allowed, or (browser sign-in) sign in again and allow them'
   }
   const bodyRetry = (body as { retryAfter?: unknown } | null)?.retryAfter
   const retryAfterSec =

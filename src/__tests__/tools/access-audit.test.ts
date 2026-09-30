@@ -102,12 +102,29 @@ describe('audit tools', () => {
 })
 
 describe('get_my_identity', () => {
-  it('answers from the token without calling jinbe', async () => {
+  it('answers from the token; its only jinbe call is the second-factor read, and it survives that failing', async () => {
     const jinbe = mockJinbe({})
     const r = await execute(getMyIdentity, {}, principal({ scopes: ['mcp', 'admin:read'] }), deps(jinbe.fetchImpl))
-    expect(sc(r).data).toMatchObject({ subject: 'user-1', org: null, scopes: ['mcp', 'admin:read'], readOnly: true, credentialType: 'oauth' })
-    expect(jinbe.calls).toHaveLength(0)
+    expect(sc(r).data).toMatchObject({ subject: 'user-1', org: null, scopes: ['mcp', 'admin:read'], readOnly: true, credentialType: 'oauth', secondFactor: { available: false } })
+    expect(jinbe.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(['GET /api/me/permissions'])
     expect(JSON.stringify(r)).not.toContain('ory_at_')
+  })
+
+  it('which of my actions need a second factor, and what this connection can do about each', async () => {
+    const jinbe = mockJinbe({
+      'GET /api/me/permissions': {
+        groups: ['ops'], roles: [], permissions: ['sites:apply', 'users:reset_second_factor'],
+        secondFactor: { required: true, requiredBecause: ['ops'], enrolled: true, methods: ['totp'], currentAal: 'aal2', factorAgeMin: 3, stepUpFresh: true, stepUpPermissions: ['sites:apply', 'users:reset_second_factor'] },
+      },
+    })
+    const p = principal({ scopes: ['mcp', 'sites:apply'], kind: 'personal', keyId: 'k', stepUpActions: false })
+    const r = await execute(getMyIdentity, {}, p, deps(jinbe.fetchImpl))
+    const sf = sc(r).data.secondFactor
+    expect(sf.signIn).toEqual({ required: true, requiredBecause: ['ops'], enrolled: true, methods: ['totp'] })
+    expect(sf.actionsNeedingIt).toEqual([
+      { permission: 'sites:apply', tools: ['publish_site', 'pause_site', 'resume_site', 'rollback_site'], thisConnection: 'key_created_without' },
+      { permission: 'users:reset_second_factor', tools: [], thisConnection: 'console_only' },
+    ])
   })
 
   it('a personal key without email or expiry still answers (no internal_error)', async () => {

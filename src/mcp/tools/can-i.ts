@@ -155,7 +155,11 @@ export function makeCanI(tools: () => readonly ToolDef[]) {
             : `Use a connection that carries ${def.scopes[0]}; if you do not hold it, ask an administrator.`,
         })
       }
-      if (def.protectedAction && !pa.allowed) return answer({ wouldRefuseBecause: 'protected_actions_off' })
+      if (def.protectedAction && !pa.allowed) {
+        // The rule that triggers it: jinbe's step-up (a second factor within 15 minutes), which this
+        // connection cannot stand in for now — pa.reason says why, pa.guidance what to do.
+        return answer({ wouldRefuseBecause: 'protected_actions_off', secondFactor: { rule: 'step_up', requiredAal: 'aal2', maxAgeMin: 15, permission: def.scopes[0] } })
+      }
 
       if (args.arguments) {
         const parsed = z.object(def.input).safeParse(args.arguments)

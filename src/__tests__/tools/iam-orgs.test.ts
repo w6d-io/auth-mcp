@@ -96,3 +96,25 @@ describe('organisation tools name their org; jinbe decides', () => {
     expect(jinbe.calls).toHaveLength(0)
   })
 })
+
+describe('second factor in the IAM reads (jinbe wave19)', () => {
+  it('get_second_factor_map passes the one-read map through', async () => {
+    const { getSecondFactorMap } = await import('../../mcp/tools/iam.js')
+    const map = { rules: [], groups: { ops: { required: true } }, permissions: null, unavailable: ['permissions'] }
+    const r = await execute(getSecondFactorMap, {}, principal({ scopes: ['mcp', 'groups:read'] }), deps(mockJinbe({ 'GET /api/admin/rbac/second-factor-map': map }).fetchImpl))
+    expect(sc(r).data).toEqual(map)
+  })
+
+  it('jinbe roles carry stepUpPermissions, jinbe permissions their stepUpRule', async () => {
+    const { listRoles, getPermissionCatalog } = await import('../../mcp/tools/iam.js')
+    const jinbe = mockJinbe({
+      'GET /api/admin/rbac/services/jinbe/roles': { service: 'jinbe', roles: [{ name: 'ops', permissions: ['sites:read', 'sites:apply'] }] },
+      'GET /api/admin/rbac/services/jinbe/permissions': ['sites:read', 'sites:apply'],
+      'GET /api/catalog': { permissions: [{ name: 'sites:apply', stepUpRule: { required: true, maxAgeMin: 15, viaPersonalKey: { maxAgeDays: 30 }, fourEyes: 'prod' } }, { name: 'sites:read', stepUpRule: { required: false, maxAgeMin: null, viaPersonalKey: null, fourEyes: false } }] },
+    })
+    const roles = await execute(listRoles, { service: 'jinbe' }, principal(), deps(jinbe.fetchImpl))
+    expect(sc(roles).data.roles[0].stepUpPermissions).toEqual(['sites:apply'])
+    const cat = await execute(getPermissionCatalog, { service: 'jinbe' }, principal(), deps(jinbe.fetchImpl))
+    expect(sc(cat).data.stepUpRules['sites:apply']).toMatchObject({ required: true, maxAgeMin: 15, fourEyes: 'prod' })
+  })
+})

@@ -47,7 +47,7 @@ export const listSites = defineTool({
 export const getSite = defineTool({
   name: 'get_site',
   title: 'Get a site',
-  description: 'One site: its saved intent (address, upstream, gates, routes, roles, groups, login), version, etag and applied state.',
+  description: "One site: its saved intent (address, upstream, gates, routes, roles, groups, login), version, etag, applied state, its login second factor (which routes need one) and, for an ephemeral site, its expiry.",
   scopes: [P.SITES_READ],
   input: { name: siteName },
   async run(args, { jinbe, call }) {
@@ -60,6 +60,8 @@ export const getSite = defineTool({
         status: s.status,
         savedAt: s.savedAt,
         applied: s.applied ? { version: s.applied.version, at: s.applied.at, rules: s.applied.rules.length } : null,
+        // The site's login second factor (jinbe wave19): {scope, routes, clients, minAal, summary}.
+        ...(s.secondFactor !== undefined ? { secondFactor: s.secondFactor } : {}),
         // Ephemeral sites (jinbe wave19): {ttlSec, expiresAt, remainingSec, expired} or null (permanent).
         ...(s.ephemeral !== undefined ? { ephemeral: s.ephemeral && typeof s.ephemeral === 'object' ? withoutActors(s.ephemeral) : null } : {}),
       },
