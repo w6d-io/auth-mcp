@@ -139,3 +139,41 @@ describe('can_i: no side effects, the refusal it would get', () => {
     expect(jinbe.calls.every((c) => c.method === 'GET')).toBe(true)
   })
 })
+
+describe('can_i: a group that requires its members to use 2FA (the klavem / staff-auditors case)', () => {
+  const admin = principal({ scopes: ['mcp', 'groups.members:write', 'groups:read', 'users:read', 'users:verify'], kind: 'personal', keyId: 'k', stepUpAt: new Date(Date.now() - 86400e3).toISOString(), stepUpActions: true })
+  const jinbe = (mfa: boolean | null) =>
+    mockJinbe({
+      'GET /api/admin/rbac/groups': { groups: [{ name: 'staff-auditors', secondFactor: { required: true, source: 'group_setting', enrolBeforeJoining: true } }, { name: 'viewers', secondFactor: { required: false } }] },
+      'GET /api/admin/users/lookup': { match: 'email', data: [{ id: 'u-9', email: 'klavem@example.com', name: null, active: true, groups: [], organizations: [], mfa }] },
+    })
+
+  it('predicts mfa_required, naming the group, when the person has no second factor', async () => {
+    const j = jinbe(false)
+    const r = await execute(canI, { tool: 'add_user_to_groups', arguments: { email: 'klavem@example.com', groups: ['staff-auditors', 'viewers'] } }, admin, deps(j.fetchImpl))
+    expect(sc(r).data).toMatchObject({ allowed: false, wouldRefuseBecause: 'mfa_required', blocked: [{ user: 'klavem@example.com', groups: ['staff-auditors'] }], secondFactor: { rule: 'enrol_before_joining' } })
+    expect(sc(r).data.hint).toMatch(/staff-auditors requires its members to use 2FA/)
+    expect(sc(r).data.hint).not.toMatch(/admin/i)
+    expect(j.calls.every((c) => c.method === 'GET')).toBe(true)
+  })
+
+  it('allowed when enrolled, or when no group requires it; unknown enrolment is a note', async () => {
+    expect(sc(await execute(canI, { tool: 'add_user_to_groups', arguments: { email: 'klavem@example.com', groups: ['staff-auditors'] } }, admin, deps(jinbe(true).fetchImpl))).data.allowed).toBe(true)
+    const none = await execute(canI, { tool: 'add_user_to_groups', arguments: { email: 'klavem@example.com', groups: ['viewers'] } }, admin, deps(jinbe(false).fetchImpl))
+    expect(sc(none).data.allowed).toBe(true)
+    expect(sc(none).notes.join(' ')).toMatch(/None of these groups requires/)
+    const unknown = await execute(canI, { tool: 'add_user_to_groups', arguments: { email: 'klavem@example.com', groups: ['staff-auditors'] } }, admin, deps(jinbe(null).fetchImpl))
+    expect(sc(unknown).notes.join(' ')).toMatch(/Not known whether klavem@example.com set up 2FA/)
+  })
+
+  it('plan_bulk group adds are checked per person', async () => {
+    const r = await execute(canI, { tool: 'plan_bulk', arguments: { op: 'groups.members.add', items: [{ user: 'klavem@example.com', groups: ['staff-auditors'] }] } }, admin, deps(jinbe(false).fetchImpl))
+    expect(sc(r).data).toMatchObject({ wouldRefuseBecause: 'mfa_required', blocked: [{ user: 'klavem@example.com', groups: ['staff-auditors'] }] })
+  })
+
+  it('without groups:read and users:read it says it could not check', async () => {
+    const r = await execute(canI, { tool: 'add_user_to_groups', arguments: { email: 'klavem@example.com', groups: ['staff-auditors'] } }, principal({ scopes: ['mcp', 'groups.members:write'], kind: 'personal', keyId: 'k', stepUpAt: new Date().toISOString(), stepUpActions: true }), deps(jinbe(false).fetchImpl))
+    expect(sc(r).data.allowed).toBe(true)
+    expect(sc(r).notes.join(' ')).toMatch(/cannot tell whether a group requires its members to use 2FA/)
+  })
+})

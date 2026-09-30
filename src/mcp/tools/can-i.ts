@@ -5,6 +5,7 @@ import { hasAnyScope, hasScope } from '../../auth/scopes.js'
 import { protectedActionsOf } from '../../auth/protected-actions.js'
 import { ToolError } from '../../safety/errors.js'
 import { groupsGranting } from '../granted-by.js'
+import { targetSecondFactorRule } from './can-i-target.js'
 
 /**
  * `can_i`: would this connection be allowed to run a tool, without running it.
@@ -21,8 +22,9 @@ import { groupsGranting } from '../granted-by.js'
  * - base:         the local checks above, nothing else to know
  * - production:   a key's apply is refused in production (use_apply_request): read the platform flag
  * - publish_gate: the site's security findings (error findings block; confirm ones need acknowledge)
+ * - target_2fa:   a group that requires its members to use 2FA refuses a person without it (can-i-target.ts)
  */
-export type CanIRule = 'base' | 'production' | 'publish_gate'
+export type CanIRule = 'base' | 'production' | 'publish_gate' | 'target_2fa'
 
 export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   // Sites: drafts, imports, versions (nothing live changes)
@@ -48,13 +50,13 @@ export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   send_login_link: ['base'],
   resend_verification_email: ['base'],
   change_user_email: ['base'],
-  add_user_to_groups: ['base'],
+  add_user_to_groups: ['base', 'target_2fa'],
   // Access model
   create_group: ['base'],
   update_group: ['base'],
   set_site_roles: ['base'],
   // Bulk
-  plan_bulk: ['base'],
+  plan_bulk: ['base', 'target_2fa'],
   execute_bulk: ['base'],
   // This connection
   revoke_my_key: ['base'],
@@ -105,9 +107,12 @@ async function publishGateRule(ctx: ToolContext, args: Record<string, unknown> |
   }
 }
 
-const RULE_CHECKS: Record<Exclude<CanIRule, 'base'>, (ctx: ToolContext, args: Record<string, unknown> | undefined) => Promise<Verdict>> = {
+type RuleCheck = (ctx: ToolContext, args: Record<string, unknown> | undefined, tool: string) => Promise<Verdict>
+const RULE_CHECKS: Record<Exclude<CanIRule, 'base'>, RuleCheck> = {
   production: (ctx) => productionRule(ctx),
   publish_gate: publishGateRule,
+  // The tool name picks the targets: add_user_to_groups (email, groups) or plan_bulk groups.members.add items.
+  target_2fa: (ctx, args, tool) => targetSecondFactorRule(ctx, tool, args),
 }
 
 /** Built with the tool list (a thunk: the list includes this tool). */
@@ -179,7 +184,7 @@ export function makeCanI(tools: () => readonly ToolDef[]) {
       const notes: string[] = []
       for (const rule of rules) {
         if (rule === 'base') continue
-        const verdict = await RULE_CHECKS[rule](ctx, args.arguments)
+        const verdict = await RULE_CHECKS[rule](ctx, args.arguments, def.name)
         if ('refuse' in verdict) return answer(verdict.refuse)
         notes.push(...verdict.notes)
       }

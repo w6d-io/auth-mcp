@@ -34,6 +34,7 @@ export type ToolErrorCode =
   | 'route_not_declared'
   | 'grant_exceeds_own'
   | 'needs_2fa'
+  | 'mfa_required'
   | 'staff_group_super_admin_only'
   | 'internal_error'
 
@@ -79,6 +80,8 @@ const HINTS: Partial<Record<ToolErrorCode, string>> = {
   protected_actions_off:
     'This is a protected action (publish, change an email, add to groups, edit groups and roles). A personal key: create a new key with protected actions allowed. A browser sign-in: /mcp → example → Re-authenticate and tick "Allow protected actions" (they last 12 hours). get_my_identity says which applies.',
   idempotency_key_reused: 'This idempotencyKey was used for a different request. Use a new key (or omit it) for a new change.',
+  mfa_required:
+    'The person must set up two-step sign-in before joining: details.targetGroups require their members to use 2FA. They enrol under Settings → Authenticator app; then retry. Not retryable before that.',
   needs_2fa:
     'This action needs a second factor proven in a browser, and this connection cannot stand in for it: do it in the console. details.secondFactor names the rule.',
   grant_exceeds_own:
@@ -144,13 +147,15 @@ const UPSTREAM_CODES: Record<string, ToolErrorCode> = {
   grant_exceeds_own: 'grant_exceeds_own',
   staff_group_super_admin_only: 'staff_group_super_admin_only',
   privilege_escalation_blocked: 'forbidden',
+  // A group whose "Members must use 2FA" switch is on refuses a person with no second factor.
+  mfa_required: 'mfa_required',
 }
 
 /** Codes whose hint is jinbe's own when it sends one: it names the groups that grant what is missing. */
 const JINBE_HINTED = new Set<ToolErrorCode>([
   'forbidden', 'insufficient_scope', 'grant_exceeds_own', 'staff_group_super_admin_only',
   // Second-factor refusals: jinbe's hint says what to do for THIS credential (keyReason).
-  'protected_actions_off', 'needs_2fa', 'second_factor_required', 'reauth_required',
+  'protected_actions_off', 'needs_2fa', 'second_factor_required', 'reauth_required', 'mfa_required',
 ])
 
 /**
@@ -212,7 +217,7 @@ function upstreamDetails(body: unknown): unknown {
   for (const k of [
     'checks', 'issues', 'details', 'refused', 'ties', 'sites', 'stepUp', 'etag', 'approve_url', 'plan', 'findings',
     // A permission refusal: what is missing and which groups grant it (group names, never members).
-    'permission', 'missing', 'missingByScope', 'grantedBy', 'blockingGroup',
+    'permission', 'missing', 'missingByScope', 'grantedBy', 'blockingGroup', 'targetGroups',
     // A second-factor refusal: {rule, requiredAal, maxAgeMin, requiredBecause, groups, keyReason}.
     'secondFactor',
   ]) {

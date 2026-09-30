@@ -132,3 +132,11 @@ describe('second-factor refusals (jinbe wave19 2FA visibility)', () => {
     expect(e.body).toMatchObject({ code: 'second_factor_required', hint: 'Set up two-step sign-in', details: { secondFactor: { rule: 'group_sign_in', requiredBecause: ['ops'] } } })
   })
 })
+
+describe('mfa_required (a group requiring its members to use 2FA)', () => {
+  it('its own code, the groups, jinbe hint', () => {
+    const e = fromJinbe(422, { applied: false, error: 'mfa_required', message: "Group 'staff-auditors' requires its members to use two-step sign-in", targetGroups: ['staff-auditors'], hint: 'Have the user complete /settings → Authenticator app, then retry.', secondFactor: { rule: 'enrol_before_joining', requiredAal: 'aal2', groups: ['staff-auditors'] } })
+    expect(e.body).toMatchObject({ code: 'mfa_required', retryable: false, hint: 'Have the user complete /settings → Authenticator app, then retry.' })
+    expect(e.body.details).toMatchObject({ targetGroups: ['staff-auditors'], secondFactor: { rule: 'enrol_before_joining' } })
+  })
+})

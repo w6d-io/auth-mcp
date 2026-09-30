@@ -18,7 +18,8 @@ const page = {
 export const listGroups = defineTool({
   name: 'list_groups',
   title: 'List groups',
-  description: 'Group definitions: each group, the roles it gives per service, and whether its members must sign in with a second factor (secondFactor.required, and whether it must be enrolled before joining).',
+  description:
+    "Group definitions: each group, the roles it gives per service, and whether the group requires its members to use 2FA (secondFactor.required, the group's \"Members must use 2FA\" switch: members sign in with a second factor, and nobody joins before setting one up).",
   scopes: [P.GROUPS_READ],
   input: { query: z.string().max(64).optional().describe('Substring of the group name'), ...page },
   async run(args, { jinbe, call }) {
