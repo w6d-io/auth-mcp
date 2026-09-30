@@ -322,6 +322,25 @@ export const CASES = [
       return done(steps.every((s) => s.endsWith('=ok')))
     } },
 
+  // ── Second factor visible through the MCP (jinbe wave19/2fa-visibility) ──
+  { id: 'R-2FA', actor: 'admin, ops, developer', title: 'second-factor requirements are visible: my actions needing it, the map, group and site flags, can_i names the rule', expect: 'every read carries its secondFactor fields',
+    async run(c) {
+      const problems = []
+      const me = await c.mcp.admin.call('get_my_identity')
+      const sf = me.data?.secondFactor
+      if (!me.ok || sf?.available !== true || !Array.isArray(sf.actionsNeedingIt)) problems.push(`identity secondFactor ${me.ok ? JSON.stringify(sf)?.slice(0, 80) : me.code}`)
+      else if (!sf.actionsNeedingIt.some((a) => a.permission === 'sites:apply' && a.tools.includes('publish_site'))) problems.push('sites:apply not listed as needing a second factor')
+      const map = await c.mcp.admin.call('get_second_factor_map')
+      if (!map.ok || !map.data?.permissions || !map.data?.groups) problems.push(`map ${map.ok ? `unavailable=${JSON.stringify(map.data?.unavailable)}` : map.code}`)
+      const groups = await c.mcp.admin.call('list_groups', { limit: 100 })
+      if (!groups.ok || !groups.data?.items?.every((g) => g.secondFactor && typeof g.secondFactor.required === 'boolean')) problems.push('groups lack secondFactor.required')
+      const site = await c.mcp.ops.call('get_site', { name: c.site })
+      if (!site.ok || typeof site.data?.secondFactor?.scope !== 'string') problems.push(`get_site secondFactor ${site.ok ? JSON.stringify(site.data?.secondFactor) : site.code}`)
+      const may = await c.mcp.developer.call('can_i', { tool: 'publish_site', arguments: { name: c.site } })
+      if (!may.ok || may.data?.wouldRefuseBecause !== 'insufficient_scope') problems.push(`developer can_i publish: ${may.data?.wouldRefuseBecause ?? may.code}`)
+      return { pass: problems.length === 0, got: problems.join('; ') || `ok (${sf.actionsNeedingIt.length} of my actions need a second factor)` }
+    } },
+
   // ── Adversarial ──
   { id: 'A3', actor: 'admin (raw jinbe)', title: 'jinbe gate, MCP bypassed: deletes, membership removal, key mint, 2FA reset, zones, gateway, settings, self-grant', expect: '403 delegation_ineligible:<why> each; mint-key any 403 (its own guard answers first); 400/422 = inconclusive (validation ran first)',
     async run(c) {
