@@ -20,12 +20,21 @@ export interface Principal {
   /** Personal keys only: the key's id (the Hydra client id), for audit and revocation. */
   keyId: string | null
   /**
-   * Personal keys: when the holder proved a second factor creating the key (ISO), and whether the key
-   * was created with protected actions allowed. From jinbe token-info `ext.key_step_up_at` /
-   * `ext.key_step_up_actions`; undefined when jinbe does not report them (older jinbe).
+   * When the second factor behind this connection was proven (ISO), and whether protected actions were
+   * allowed: at key creation for a personal key (`ext.key_step_up_at` / `key_step_up_actions`), at
+   * consent for an OAuth sign-in (`ext.second_factor_at` / `step_up_actions`). Undefined when jinbe
+   * does not report them (older jinbe): never guessed.
    */
   stepUpAt?: string | null
   stepUpActions?: boolean
+  /** OAuth: until when protected actions stand, as jinbe computes it (12 h after the consent 2FA). */
+  stepUpUntil?: string | null
+  /** OAuth: the sign-in's absolute end (30 days at most), after which the client must sign in again. */
+  grantExpiresAt?: string | null
+  /** OAuth: the registered client's name (somebody else's text: sanitised on output). */
+  clientName?: string | null
+  /** OAuth: consent gave all the person's permissions, or a chosen subset. */
+  scopeMode?: 'all' | 'chosen'
   /** Access-token expiry (epoch seconds). */
   expiresAt: number
   /** sha256 of the access token, for cache keys and correlation; never the token itself. */

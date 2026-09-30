@@ -6,6 +6,7 @@ import { FileActorTokenSource, StaticActorTokenSource, type ActorTokenSource } f
 import { CachingVerifier, DevVerifier, HydraIntrospectionVerifier, JinbeTokenInfoVerifier, type TokenVerifier } from './auth/verifier.js'
 import { CachingKeyExchanger, JinbeKeyExchanger } from './auth/personal-key.js'
 import { KeyRevocations } from './auth/revocations.js'
+import { checkIssuer } from './auth/issuer-check.js'
 import { parseScopeString } from './auth/scopes.js'
 import { JinbeClient } from './jinbe/client.js'
 import { KillSwitches } from './safety/kill-switch.js'
@@ -82,6 +83,11 @@ async function main() {
 
   await app.listen({ port: env.PORT, host: env.HOST })
   logger.info({ resource: env.MCP_RESOURCE, verifier: env.TOKEN_VERIFIER, readOnly: env.MCP_READ_ONLY }, 'auth-mcp listening')
+  // OAuth discovery depends on one exact issuer string; checked in the background, never fatal.
+  void checkIssuer(env.HYDRA_ISSUER).then((r) => {
+    if (r.ok) logger.info({ issuer: env.HYDRA_ISSUER }, 'OAuth issuer matches the authorization server metadata')
+    else logger.warn({ issuer: env.HYDRA_ISSUER, metadata: r.url, problem: r.problem, found: r.found }, 'OAuth issuer check failed: browser sign-in may not work (keys are unaffected)')
+  })
 }
 
 main().catch((err) => {

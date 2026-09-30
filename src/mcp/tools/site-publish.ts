@@ -45,7 +45,7 @@ export const publishSite = defineTool({
   name: 'publish_site',
   title: 'Publish a site',
   description:
-    "Apply a saved version to the gateway (permissions first, then the site's rules). Protected: needs a key created with protected actions allowed. In production a key cannot publish directly: use request_site_apply.",
+    "Apply a saved version to the gateway (permissions first, then the site's rules). Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks). In production a key cannot publish directly: use request_site_apply.",
   scopes: APPLY_SCOPES,
   write: true,
   destructive: true,
@@ -101,14 +101,14 @@ function stateTool(name: 'pause_site' | 'resume_site', title: string, descriptio
   })
 }
 
-export const pauseSite = stateTool('pause_site', 'Pause a site', 'Stop serving a site (its rules are removed); everything else is kept. Protected: needs a key created with protected actions allowed.', 'pause')
-export const resumeSite = stateTool('resume_site', 'Resume a site', 'Serve a paused site again. Protected: needs a key created with protected actions allowed.', 'resume')
+export const pauseSite = stateTool('pause_site', 'Pause a site', 'Stop serving a site (its rules are removed); everything else is kept. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks).', 'pause')
+export const resumeSite = stateTool('resume_site', 'Resume a site', 'Serve a paused site again. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks).', 'resume')
 
 export const rollbackSite = defineTool({
   name: 'rollback_site',
   title: 'Roll back a site',
   description:
-    'Save an older version as a new one and apply it. Protected: needs a key created with protected actions allowed. In production: save that version again (save_site_version) and request_site_apply.',
+    'Save an older version as a new one and apply it. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks). In production: save that version again (save_site_version) and request_site_apply.',
   scopes: APPLY_SCOPES,
   write: true,
   destructive: true,

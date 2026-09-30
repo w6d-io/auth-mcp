@@ -50,5 +50,16 @@ export const CATALOG_PERMISSIONS: ReadonlySet<string> = new Set([
   'recert:manage', 'recert:delete', 'stats:read',
 ])
 
-/** The scope catalog advertised in the protected-resource metadata. */
-export const SCOPES_SUPPORTED = [MCP_SCOPE, 'offline_access', ...new Set(Object.values(P).filter((s) => s !== MCP_SCOPE))]
+/** Catalogue permissions a delegated token may never use (jinbe `delegable: 'never'`), kept in step by the same test. */
+export const CATALOG_NEVER: ReadonlySet<string> = new Set([
+  'users:delete', 'users:reset_second_factor', 'groups.members:revoke', 'org:delete', 'org.admins:write', 'org.keys:write',
+  'sites:delete', 'sites.requests:approve', 'zones:write', 'zones:delete', 'gateway:apply', 'settings.signin:write',
+  'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:export', 'recert:manage', 'recert:delete',
+])
+
+/**
+ * The scopes advertised in the protected-resource metadata: the baseline and every permission a
+ * delegated token may carry. An OAuth client requests exactly this list (no `scope` in the 401), and
+ * Hydra grants only what was requested, so a permission missing here could never be consented to.
+ */
+export const SCOPES_SUPPORTED = [MCP_SCOPE, 'offline_access', ...[...CATALOG_PERMISSIONS].filter((s) => !CATALOG_NEVER.has(s))]

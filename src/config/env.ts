@@ -42,7 +42,8 @@ export const envSchema = z.object({
 
   // The authorization server (Hydra): issuer for PRM, public URL for personal-key exchange, admin URL
   // for introspection when TOKEN_VERIFIER=hydra.
-  HYDRA_ISSUER: z.string().url().default('https://hydra.authdev.dev.example.com'),
+  // Byte-equal to the authorization server's issuer, trailing slash included (auth/issuer-check.ts).
+  HYDRA_ISSUER: z.string().url().default('https://hydra.authdev.dev.example.com/'),
   HYDRA_PUBLIC_URL: z.string().url().default('http://auth-hydra-public:4444'),
   HYDRA_ADMIN_URL: z.string().url().default('http://auth-hydra-admin:4445'),
 

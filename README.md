@@ -21,6 +21,24 @@ Connections & keys shows the URL for your platform (what an administrator set in
 assistants) and fills a newly created key into every snippet. The same guide is served over MCP as
 the resource `docs://getting-started` and the prompt `getting-started` (`src/mcp/guide.ts`).
 
+### Sign in with the browser (Claude Code, Cursor, VS Code)
+
+No key to copy: add the server without a header, then authenticate.
+
+```sh
+claude mcp add --transport http --scope user example https://mcp.authdev.dev.example.com/mcp
+# then, inside Claude Code: /mcp → example → Authenticate   (or: claude mcp login example)
+```
+
+The browser opens on the platform's sign-in: sign in, prove your second factor, then choose on the
+consent screen all your permissions or some of them, and whether to allow protected actions (publish,
+change an email, add to groups, edit groups and roles) for the next 12 hours. Claude Code keeps the
+sign-in in the keychain and refreshes it; it lasts up to 30 days. `/mcp` → Re-authenticate signs in
+again. Discovery: the 401 names `/.well-known/oauth-protected-resource/mcp`, whose
+`authorization_servers[0]` is `HYDRA_ISSUER` — byte-equal to the authorization server's issuer
+(trailing slash included), checked at startup. The metadata's `resource` is `MCP_RESOURCE`, which must be byte-equal to jinbe's `DELEGATED_TOKEN_AUDIENCE`: consent refuses any other `resource` (invalid_target). A static `Authorization` header in the client
+configuration turns browser sign-in off for that server: keys below are for CI and headless use.
+
 ### Before you start
 
 1. **An administrator must turn AI assistants on**: Settings → AI assistants. If they limited it to

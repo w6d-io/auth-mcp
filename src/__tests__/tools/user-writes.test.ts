@@ -98,7 +98,7 @@ describe('change_user_email', () => {
     const jinbe = mockJinbe({ [`POST ${U}/${BOB}/email`]: () => ({ status: 422, body: { error: 'reauth_required', message: 'Re-verify two-factor authentication' } }) })
     const r = await execute(changeUserEmail, { userId: BOB, newEmail: 'bob@new.example.com' }, desk, deps(jinbe.fetchImpl))
     expect(sc(r).error.code).toBe('protected_actions_off')
-    expect(sc(r).error.hint).toMatch(/Create a new key with protected actions allowed/)
+    expect(sc(r).error.hint).toMatch(/create a new key with protected actions allowed.*Re-authenticate/)
   })
 
   it('never your own account, by id or email, and jinbe is not called', async () => {

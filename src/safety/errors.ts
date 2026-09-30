@@ -76,7 +76,7 @@ const HINTS: Partial<Record<ToolErrorCode, string>> = {
   never_via_mcp: 'This action is never allowed through MCP: do it in the console. Do not retry.',
   use_apply_request: 'In production a key does not publish directly: call request_site_apply, and a person approves it in the console.',
   protected_actions_off:
-    'This is a protected action (publish, change an email, add to groups, edit groups and roles). Create a new key with protected actions allowed, then retry with it.',
+    'This is a protected action (publish, change an email, add to groups, edit groups and roles). A personal key: create a new key with protected actions allowed. A browser sign-in: /mcp → example → Re-authenticate and tick "Allow protected actions" (they last 12 hours). get_my_identity says which applies.',
   idempotency_key_reused: 'This idempotencyKey was used for a different request. Use a new key (or omit it) for a new change.',
   grant_exceeds_own:
     'You may only hand out what you hold yourself. details.missing lists what this grant exceeds, details.grantedBy the groups that hold it: ask an administrator.',
@@ -272,7 +272,7 @@ export function fromJinbe(status: number, body: unknown, retryAfter?: string | n
   }
   if (code === 'protected_actions_off') {
     // jinbe's text says "prove it in a browser", which a key-holder cannot act on from here.
-    message = 'This is a protected action and this key cannot do it: create a new key with protected actions allowed'
+    message = 'This is a protected action and this connection may not do it now: create a new key with protected actions allowed, or (browser sign-in) sign in again and allow them'
   }
   const bodyRetry = (body as { retryAfter?: unknown } | null)?.retryAfter
   const retryAfterSec =

@@ -40,7 +40,8 @@ describe('publish_site', () => {
     const r = await execute(publishSite, { name: 'billing', version: 4 }, publisher, deps(jinbe.fetchImpl))
     expect(sc(r).error.code).toBe('protected_actions_off')
     expect(sc(r).error.message).toMatch(/create a new key with protected actions allowed/)
-    expect(sc(r).error.message).not.toMatch(/browser/)
+    expect(sc(r).error.message).not.toMatch(/proven in a browser session/)
+    expect(sc(r).error.message).toMatch(/sign in again and allow them/)
   })
 
   it('needs sites:apply: sites:write alone does not list or run it', async () => {

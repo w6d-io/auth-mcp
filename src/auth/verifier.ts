@@ -37,6 +37,15 @@ export interface IntrospectionClaims {
     all_permissions?: unknown
     key_step_up_at?: unknown
     key_step_up_actions?: unknown
+    // OAuth sign-ins (jinbe consent → token-info)
+    scope_mode?: unknown
+    second_factor_at?: unknown
+    step_up_at?: unknown
+    step_up_actions?: unknown
+    step_up_until?: unknown
+    granted_at?: unknown
+    grant_expires_at?: unknown
+    client_name?: unknown
   }
 }
 
@@ -87,19 +96,41 @@ export function principalFromClaims(
     keyId: personal ? (typeof ext.key_id === 'string' ? ext.key_id : claims.client_id) : null,
     expiresAt: claims.exp,
     tokenHash: sha256(opts.token),
-    ...(personal ? stepUpClaims(ext) : {}),
+    ...(personal ? stepUpClaims(ext) : oauthClaims(ext)),
   }
 }
 
+type Ext = NonNullable<IntrospectionClaims['ext']>
+type StepUp = Pick<Principal, 'stepUpAt' | 'stepUpActions' | 'stepUpUntil' | 'grantExpiresAt' | 'clientName' | 'scopeMode'>
+
+/** An ext time: ISO string, or epoch seconds like the other ext times; null kept; anything else absent. */
+function time(v: unknown): string | null | undefined {
+  if (typeof v === 'string' && Number.isFinite(Date.parse(v))) return new Date(Date.parse(v)).toISOString()
+  if (typeof v === 'number' && Number.isFinite(v)) return new Date(v * 1000).toISOString()
+  return v === null ? null : undefined
+}
+
+const put = <K extends keyof StepUp>(out: StepUp, key: K, value: StepUp[K] | undefined) => {
+  if (value !== undefined) out[key] = value
+}
+
 /** A personal key's step-up facts, only when jinbe reports them (an absent field stays absent: unknown). */
-function stepUpClaims(ext: NonNullable<IntrospectionClaims['ext']>): Pick<Principal, 'stepUpAt' | 'stepUpActions'> {
-  const out: Pick<Principal, 'stepUpAt' | 'stepUpActions'> = {}
-  const at = ext.key_step_up_at
-  // ISO string, or epoch seconds like the other ext times.
-  if (typeof at === 'string' && Number.isFinite(Date.parse(at))) out.stepUpAt = new Date(Date.parse(at)).toISOString()
-  else if (typeof at === 'number' && Number.isFinite(at)) out.stepUpAt = new Date(at * 1000).toISOString()
-  else if (at === null) out.stepUpAt = null
+function stepUpClaims(ext: Ext): StepUp {
+  const out: StepUp = {}
+  put(out, 'stepUpAt', time(ext.key_step_up_at))
   if (typeof ext.key_step_up_actions === 'boolean') out.stepUpActions = ext.key_step_up_actions
+  return out
+}
+
+/** An OAuth sign-in's facts, stamped at consent and completed by token-info (step_up_until, client_name). */
+function oauthClaims(ext: Ext): StepUp {
+  const out: StepUp = {}
+  put(out, 'stepUpAt', time(ext.second_factor_at ?? ext.step_up_at))
+  if (typeof ext.step_up_actions === 'boolean') out.stepUpActions = ext.step_up_actions
+  put(out, 'stepUpUntil', time(ext.step_up_until))
+  put(out, 'grantExpiresAt', time(ext.grant_expires_at))
+  if (typeof ext.client_name === 'string' && ext.client_name.trim()) out.clientName = ext.client_name.slice(0, 128)
+  if (ext.scope_mode === 'all' || ext.scope_mode === 'chosen') out.scopeMode = ext.scope_mode
   return out
 }
 
@@ -155,10 +186,28 @@ export class JinbeTokenInfoVerifier implements TokenVerifier {
     }
     const off = await mcpDisabledFrom(res)
     if (off) throw off
-    if (res.status === 401 || res.status === 403) throw new AuthError('invalid_token', 'The token is not active')
+    if (res.status === 401 || res.status === 403) throw new AuthError('invalid_token', await refusalMessage(res))
     if (!res.ok) throw new AuthError('verifier_unavailable', `Token info failed (${res.status})`)
     return principalFromClaims((await res.json()) as IntrospectionClaims, { resource: this.resource, token })
   }
+}
+
+/** jinbe's token-info refusal `reason`s worth telling the person (they end up in WWW-Authenticate). */
+const REFUSALS: Record<string, string> = {
+  grant_expired: 'The browser sign-in has ended (30 days at most): sign in again',
+  client_bound_elsewhere: 'This client was registered by somebody else: remove it and add the server again',
+  not_an_mcp_client: 'This token was not issued to an MCP client',
+  key_expired: 'The personal key has expired: create a new one',
+}
+
+async function refusalMessage(res: Response): Promise<string> {
+  try {
+    const reason = ((await res.clone().json()) as { reason?: unknown }).reason
+    if (typeof reason === 'string' && REFUSALS[reason]) return REFUSALS[reason]
+  } catch {
+    // no JSON: the generic message
+  }
+  return 'The token is not active'
 }
 
 /** A fixed principal for local development against a jinbe running with DEV_BYPASS_AUTH. */

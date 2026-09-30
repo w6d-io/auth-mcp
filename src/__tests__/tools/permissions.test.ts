@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { allTools } from '../../mcp/tools/index.js'
 import { BULK_SPEC } from '../../mcp/tools/bulk.js'
-import { CATALOG_PERMISSIONS, P, SCOPES_SUPPORTED } from '../../mcp/permissions.js'
+import { CATALOG_NEVER, CATALOG_PERMISSIONS, P, SCOPES_SUPPORTED } from '../../mcp/permissions.js'
 
 /**
  * Keys carry jinbe catalogue permissions only. A tool gated on anything else (the retired admin:read
@@ -49,6 +49,14 @@ describe('tool permissions', () => {
     const names = [...body.matchAll(/^\s+'([a-z][a-z0-9_.-]*:[a-z][a-z0-9_-]*)':/gm)].map((m) => m[1])
     expect(names.length).toBeGreaterThan(20)
     expect([...CATALOG_PERMISSIONS].sort()).toEqual([...new Set(names)].sort())
+    const never = [...body.matchAll(/^\s+'([a-z][a-z0-9_.-]*:[a-z][a-z0-9_-]*)':[^\n]*delegable: 'never'/gm)].map((m) => m[1])
+    expect([...CATALOG_NEVER].sort()).toEqual([...new Set(never)].sort())
+  })
+
+  it('the metadata advertises every delegable permission and no never one (what OAuth consent can grant)', () => {
+    expect(SCOPES_SUPPORTED.slice(0, 2)).toEqual(['mcp', 'offline_access'])
+    for (const p of CATALOG_PERMISSIONS) expect(SCOPES_SUPPORTED.includes(p), p).toBe(!CATALOG_NEVER.has(p))
+    for (const t of allTools) for (const s of t.scopes) expect(SCOPES_SUPPORTED, `${t.name}: ${s}`).toContain(s)
   })
 
   it('site reads are sites:read, as jinbe declares GET /api/admin/sites/:name', () => {

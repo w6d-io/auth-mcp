@@ -110,7 +110,7 @@ export const changeUserEmail = defineTool({
   name: 'change_user_email',
   title: "Change a user's email",
   description:
-    "Change another user's sign-in address. The new address starts unverified and is sent a verification link; the change is recorded in the audit trail. Never your own, never someone holding admin rights you lack. Protected: needs a key created with protected actions allowed.",
+    "Change another user's sign-in address. The new address starts unverified and is sent a verification link; the change is recorded in the audit trail. Never your own, never someone holding admin rights you lack. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks).",
   scopes: [P.USERS_UPDATE_EMAIL],
   write: true,
   destructive: true,
@@ -144,7 +144,7 @@ export const addUserToGroups = defineTool({
   name: 'add_user_to_groups',
   title: 'Add a user to groups',
   description:
-    'Add a user (by email) to platform groups; their other groups are kept. Never removes a group (removal is done in the console). Protected: needs a key created with protected actions allowed.',
+    'Add a user (by email) to platform groups; their other groups are kept. Never removes a group (removal is done in the console). Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks).',
   scopes: [P.GROUPS_MEMBERS_WRITE],
   write: true,
   protectedAction: true,

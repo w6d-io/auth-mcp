@@ -19,7 +19,10 @@ describe('protectedActionsOf (the twin of jinbe keyStepUpVerdict)', () => {
     ['created with protected actions off', { kind: 'personal', stepUpAt: recent, stepUpActions: false }, false, 'key_created_without'],
     ['on, but no factor proven at creation', { kind: 'personal', stepUpActions: true }, false, 'key_created_without'],
     ['proof older than 30 days', { kind: 'personal', stepUpAt: old, stepUpActions: true }, false, 'proof_expired'],
-    ['an OAuth connection', { kind: 'oauth' }, false, 'not_a_personal_key'],
+    ['an OAuth sign-in jinbe says nothing about', { kind: 'oauth' }, false, 'unknown'],
+    ['an OAuth sign-in within jinbe\'s 12 h window', { kind: 'oauth', stepUpActions: true, stepUpAt: recent, stepUpUntil: new Date(Date.now() + 3600e3).toISOString() }, true, undefined],
+    ['an OAuth sign-in past the window', { kind: 'oauth', stepUpActions: true, stepUpAt: recent, stepUpUntil: new Date(Date.now() - 60e3).toISOString() }, false, 'proof_expired'],
+    ['an OAuth consent without protected actions', { kind: 'oauth', stepUpActions: false }, false, 'consent_without'],
     ['a jinbe that does not report it', { kind: 'personal' }, false, 'unknown'],
   ] as const)('%s', (_label, p, allowed, reason) => {
     const out = protectedActionsOf(p as never)

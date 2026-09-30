@@ -28,7 +28,7 @@ export const createGroup = defineTool({
   name: 'create_group',
   title: 'Create a group',
   description:
-    'Create a platform group and the roles it gives per service. Protected: needs a key created with protected actions allowed. Refused when it exists (conflict).',
+    'Create a platform group and the roles it gives per service. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks). Refused when it exists (conflict).',
   scopes: SCOPES,
   write: true,
   protectedAction: true,
@@ -50,7 +50,7 @@ export const updateGroup = defineTool({
   name: 'update_group',
   title: 'Edit a group',
   description:
-    "Change the roles a group gives. mode 'merge' (default) sets the roles of the services you name and keeps the others; 'replace' makes the group exactly what you pass. Never deletes the group. Protected: needs a key created with protected actions allowed.",
+    "Change the roles a group gives. mode 'merge' (default) sets the roles of the services you name and keeps the others; 'replace' makes the group exactly what you pass. Never deletes the group. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks).",
   scopes: SCOPES,
   write: true,
   protectedAction: true,
@@ -74,7 +74,7 @@ export const setSiteRoles = defineTool({
   name: 'set_site_roles',
   title: "Set a site's roles",
   description:
-    "Replace the roles a service (a site) defines and the permissions each grants, e.g. {\"viewer\": [\"billing:read\"], \"editor\": [\"billing:read\", \"billing:write\"]}. Returns the roles before and after. Protected: needs a key created with protected actions allowed.",
+    "Replace the roles a service (a site) defines and the permissions each grants, e.g. {\"viewer\": [\"billing:read\"], \"editor\": [\"billing:read\", \"billing:write\"]}. Returns the roles before and after. Protected: needs a connection allowed protected actions (get_my_identity says; can_i checks).",
   scopes: SCOPES,
   write: true,
   protectedAction: true,
