@@ -295,6 +295,33 @@ export const CASES = [
       return done(!!verified, acknowledge.length ? ` (acknowledged ${acknowledge.join(',')})` : '')
     } },
 
+  // ── Site lifecycle: an ephemeral site (paused, never deleted, at expiry), renewal, a deletion request ──
+  { id: 'R-LC', actor: 'developer', title: 'ephemeral site: create + save with ttl → expiry shown → extend → request deletion (a person approves; no approve tool)', expect: 'every step ok; request pending; approve_site_deletion does not exist',
+    async run(c) {
+      const name = `${c.site}-eph`
+      c.state.add('sites', { name })
+      const [service, namespace, port] = CFG.upstream
+      const steps = []
+      const step = (label, r, check = () => true) => {
+        const good = r.ok && !!check(r.data)
+        steps.push(`${label}=${good ? 'ok' : r.code}`)
+        return good
+      }
+      const dev = c.mcp.developer
+      const done = (pass) => ({ pass, got: steps.join(' '), audit: { holder: 'developer', events: ['site.deletion_requested'] } })
+      if (!step('create', await dev.call('create_site', { name, displayName: `E2E ephemeral ${CFG.run}`, template: 'app', host: `${name}.${CFG.siteDomain}`, upstream: { service, namespace, port: Number(port) }, ephemeral: { ttl: '1h' } }))) return done(false)
+      if (!step('save', await dev.call('save_site_version', { name, ephemeral: { ttl: '1h' } }), (d) => d.ephemeral?.ttlSec === 3600)) return done(false)
+      if (!step('shown', await dev.call('get_site', { name }), (d) => d.ephemeral?.expired === false)) return done(false)
+      if (!step('extend', await dev.call('extend_site_ttl', { name, ttl: '2h' }), (d) => d.ephemeral?.ttlSec === 7200)) return done(false)
+      if (!step('bad_ttl', { ok: (await dev.call('extend_site_ttl', { name, ttl: '8d' })).code === 'invalid_request', data: {} })) return done(false)
+      const req = await dev.call('request_site_deletion', { name, reason: `${CFG.run} e2e cleanup` })
+      if (!step('request', req, (d) => d.state === 'pending')) return done(false)
+      step('again', { ok: (await dev.call('request_site_deletion', { name })).code === 'conflict', data: {} })
+      if (!step('listed', await dev.call('list_deletion_requests', { state: 'pending', site: name }), (d) => d.items?.some((i) => i.id === req.data.id))) return done(false)
+      step('no_approve', { ok: (await c.mcp.admin.call('approve_site_deletion', { id: req.data.id })).code === 'tool_not_found', data: {} })
+      return done(steps.every((s) => s.endsWith('=ok')))
+    } },
+
   // ── Adversarial ──
   { id: 'A3', actor: 'admin (raw jinbe)', title: 'jinbe gate, MCP bypassed: deletes, membership removal, key mint, 2FA reset, zones, gateway, settings, self-grant', expect: '403 delegation_ineligible:<why> each; mint-key any 403 (its own guard answers first); 400/422 = inconclusive (validation ran first)',
     async run(c) {

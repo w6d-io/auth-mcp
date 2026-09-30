@@ -29,6 +29,7 @@ export interface SiteDetail {
   savedAt: string
   savedBy: string
   applied: { version: number; at: string; by: string; rules: string[] } | null
+  ephemeral?: Record<string, unknown> | null
 }
 
 export interface SiteCheck {

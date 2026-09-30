@@ -11,6 +11,7 @@ import { hasScope } from '../../auth/scopes.js'
 import type { GroupDefinition } from '../../jinbe/types.js'
 import type { SiteDetail } from '../../jinbe/types.js'
 import { SITES, idempotencyKey, intent, isNotFound, note, obj, siteName, withoutActors } from './write-common.js'
+import { ephemeral } from './site-lifecycle.js'
 
 /**
  * Site drafts, imports and saved versions: DIRECT through a key (sites:write), and none of them
@@ -104,6 +105,7 @@ export const createSite = defineTool({
       .strict()
       .describe('The in-cluster Service the site sends traffic to'),
     gates: z.array(presetGate).max(20).optional().describe("Replace or add the template's gates, by id, as presets"),
+    ephemeral: ephemeral.optional().describe('{ttl?}: make it an ephemeral site (paused, never deleted, when the TTL passes; 1 hour to 7 days, 24 h by default). The expiry starts at the first save: pass the same to save_site_version'),
     expert_gate: expertGate.optional().describe('One hand-built gate, only when no preset fits (flagged by check_site_draft)'),
     idempotencyKey,
   },
@@ -132,9 +134,21 @@ export const createSite = defineTool({
       }
     }
     return {
-      data: { name: args.name, template: args.template, draft: out, site, lint: lintOf(site), accessChecklist: accessChecklist(site, existing) },
+      data: {
+        name: args.name,
+        template: args.template,
+        draft: out,
+        site,
+        lint: lintOf(site),
+        accessChecklist: accessChecklist(site, existing),
+        ...(args.ephemeral ? { ephemeral: { requested: args.ephemeral, startsAt: 'first save (save_site_version with the same ephemeral)' } } : {}),
+      },
       source: `jinbe:${SITES}/:name/draft`,
-      notes: ['Draft only: nothing is live.', nextStep('create')],
+      notes: [
+        'Draft only: nothing is live.',
+        ...(args.ephemeral ? [`Ephemeral: pass ephemeral ${JSON.stringify(args.ephemeral)} to save_site_version; the expiry counts from that save, and the site is paused (not deleted) when it passes.`] : []),
+        nextStep('create'),
+      ],
     }
   },
 })
@@ -252,6 +266,10 @@ export const saveSiteVersion = defineTool({
     site: intent.optional().describe('Omit to save the draft'),
     etag: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/).optional().describe('The etag you edited (get_site); needed with site for an existing one'),
     note,
+    ephemeral: ephemeral
+      .nullable()
+      .optional()
+      .describe('{ttl?}: an ephemeral site, paused (never deleted) when the TTL passes, counted from this save; null: permanent again; left out: unchanged'),
     idempotencyKey,
   },
   async run(args, ctx) {
@@ -270,12 +288,15 @@ export const saveSiteVersion = defineTool({
     }
     if (saved) etag ??= saved.etag
     const res = await ctx.jinbe.write<Record<string, unknown>>(ctx.call, 'PUT', `${SITES}/${seg(args.name)}`, {
-      body: { site, ...(args.note ? { note: args.note } : {}) },
+      body: { site, ...(args.note ? { note: args.note } : {}), ...(args.ephemeral !== undefined ? { ephemeral: args.ephemeral } : {}) },
       idempotencyKey: args.idempotencyKey,
       headers: etag ? { 'if-match': `"${etag}"` } : {},
     })
     return {
-      data: withoutActors(obj(res.body)),
+      data: (() => {
+        const b = obj(res.body)
+        return { ...withoutActors(b), ...(b.ephemeral ? { ephemeral: withoutActors(obj(b.ephemeral)) } : {}) }
+      })(),
       source: `jinbe:${SITES}/:name`,
       notes: ['Saved, not live.', nextStep('save')],
     }

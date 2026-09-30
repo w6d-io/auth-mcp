@@ -8,6 +8,7 @@ import { ToolError, toolError } from '../../safety/errors.js'
 import { SITE_NAME } from '../../safety/untrusted.js'
 import { lintSite, summarize } from '../site-lint.js'
 import { nextStep } from '../onboarding.js'
+import { withoutActors } from './write-common.js'
 import type { BlastRadius, SiteDetail, SitePreview, SiteSummary } from '../../jinbe/types.js'
 
 const BASE = '/api/admin/sites'
@@ -59,6 +60,8 @@ export const getSite = defineTool({
         status: s.status,
         savedAt: s.savedAt,
         applied: s.applied ? { version: s.applied.version, at: s.applied.at, rules: s.applied.rules.length } : null,
+        // Ephemeral sites (jinbe wave19): {ttlSec, expiresAt, remainingSec, expired} or null (permanent).
+        ...(s.ephemeral !== undefined ? { ephemeral: s.ephemeral && typeof s.ephemeral === 'object' ? withoutActors(s.ephemeral) : null } : {}),
       },
       source: `jinbe:${BASE}/:name`,
     }

@@ -39,6 +39,9 @@ export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   rollback_site: ['base', 'production'],
   pause_site: ['base'],
   resume_site: ['base'],
+  // Sites: lifecycle (an expiry pauses, never deletes; deletion is a request a person approves)
+  extend_site_ttl: ['base'],
+  request_site_deletion: ['base'],
   // People
   invite_user: ['base'],
   send_recovery_email: ['base'],

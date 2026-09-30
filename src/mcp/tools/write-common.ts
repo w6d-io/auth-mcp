@@ -44,7 +44,7 @@ export const obj = (v: unknown): Record<string, unknown> => (v && typeof v === '
 export function withoutActors<T extends Record<string, unknown>>(v: T): Partial<T> {
   const out: Record<string, unknown> = {}
   for (const [k, val] of Object.entries(v)) {
-    if (/^(by|updatedBy|savedBy|requestedBy|approvedBy|rejectedBy|appliedBy|importedBy)$/.test(k)) continue
+    if (/^(by|updatedBy|savedBy|requestedBy|approvedBy|rejectedBy|appliedBy|importedBy|decidedBy|setBy)$/.test(k)) continue
     out[k] = val
   }
   return out as Partial<T>
