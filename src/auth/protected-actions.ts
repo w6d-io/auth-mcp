@@ -29,6 +29,9 @@ export interface ProtectedActions {
 export const REAUTH_GUIDANCE =
   'Sign in again: in Claude Code, /mcp → example → Re-authenticate (browser, second factor, then tick "Allow protected actions" on the consent screen).'
 
+/** The quickest way back when protected actions were allowed and only the proof is old. */
+export const REFRESH_GUIDANCE = 'refresh_second_factor gives a link: confirm your second factor in the browser, then retry.'
+
 type Facts = Pick<Principal, 'kind' | 'stepUpAt' | 'stepUpActions' | 'stepUpUntil'>
 
 function forKey(p: Facts, now: number, covers: string[]): ProtectedActions {
@@ -42,7 +45,7 @@ function forKey(p: Facts, now: number, covers: string[]): ProtectedActions {
   if (!Number.isFinite(at)) return { allowed: false, reason: 'key_created_without', guidance: 'Create a new key with protected actions allowed.', covers }
   const validUntil = new Date(at + KEY_STEP_UP_MAX_AGE_MS).toISOString()
   if (now - at > KEY_STEP_UP_MAX_AGE_MS) {
-    return { allowed: false, reason: 'proof_expired', validUntil, guidance: 'The key is older than 30 days for protected actions: create a new key with protected actions allowed.', covers }
+    return { allowed: false, reason: 'proof_expired', validUntil, guidance: `${REFRESH_GUIDANCE} Or create a new key with protected actions allowed.`, covers }
   }
   return { allowed: true, validUntil, covers }
 }
@@ -63,7 +66,7 @@ function forOAuth(p: Facts, now: number, covers: string[]): ProtectedActions {
     }
   }
   const validUntil = new Date(until).toISOString()
-  if (until <= now) return { allowed: false, reason: 'proof_expired', validUntil, guidance: REAUTH_GUIDANCE, covers }
+  if (until <= now) return { allowed: false, reason: 'proof_expired', validUntil, guidance: `${REFRESH_GUIDANCE} Or: ${REAUTH_GUIDANCE}`, covers }
   return { allowed: true, validUntil, covers }
 }
 

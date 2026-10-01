@@ -134,6 +134,7 @@ const TROUBLESHOOTING: ReadonlyArray<[string, string]> = [
   ['503 retry_later', 'The platform could not check the key or your permissions just now (authz_unavailable). Retry shortly.'],
   ['tool error insufficient_scope', 'The key was created with chosen permissions that do not cover this tool.'],
   ['tool error forbidden', 'Your account does not hold the permission.'],
+  ['tool error protected_actions_off with details.stepUpLink', 'The second factor behind this connection is too old: open the link, confirm your second factor, then retry (refresh_second_factor makes a new link).'],
   ['tool error needs_2fa', 'The action needs a second factor proven in a browser and no connection can stand in for it: do it in the console. `details.secondFactor.rule` names the rule.'],
   ['tool error route_not_declared', 'The platform does not know this endpoint yet: it is older than this MCP server, or the route is not deployed. Not a ban: retry once the platform is updated.'],
   ['tool error never_via_mcp', 'The action is never allowed through a key (see above). Do it in the console.'],

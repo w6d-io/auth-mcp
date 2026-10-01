@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { authorizationServerMetadataUrl, checkIssuer } from '../../auth/issuer-check.js'
 import { principalFromClaims } from '../../auth/verifier.js'
-import { protectedActionsOf, REAUTH_GUIDANCE } from '../../auth/protected-actions.js'
+import { protectedActionsOf, REAUTH_GUIDANCE, REFRESH_GUIDANCE } from '../../auth/protected-actions.js'
 import { metadataUrl, protectedResourceMetadata } from '../../app.js'
 import { execute } from '../../mcp/registry.js'
 import { getMyIdentity } from '../../mcp/tools/identity.js'
@@ -41,7 +41,7 @@ describe('OAuth principal from token-info', () => {
 
   it('past the 12 h window or without the consent box: not allowed, with how to get them back', () => {
     const expired = protectedActionsOf({ kind: 'oauth', stepUpActions: true, stepUpUntil: new Date(Date.now() - 1000).toISOString() })
-    expect(expired).toMatchObject({ allowed: false, reason: 'proof_expired', guidance: REAUTH_GUIDANCE })
+    expect(expired).toMatchObject({ allowed: false, reason: 'proof_expired', guidance: `${REFRESH_GUIDANCE} Or: ${REAUTH_GUIDANCE}` })
     expect(protectedActionsOf({ kind: 'oauth', stepUpActions: false })).toMatchObject({ reason: 'consent_without', guidance: REAUTH_GUIDANCE })
   })
 })
@@ -51,7 +51,7 @@ describe('get_my_identity for a browser sign-in', () => {
     const p = principal({ kind: 'oauth', clientName: 'Claude Code', scopeMode: 'all', grantExpiresAt: '2026-10-30T00:00:00.000Z', stepUpActions: true, stepUpUntil: new Date(Date.now() - 1000).toISOString() })
     const r = await execute(getMyIdentity, {}, p, deps(mockJinbe({}).fetchImpl))
     expect(sc(r).data).toMatchObject({ credentialType: 'oauth', signIn: { client: 'Claude Code', permissions: 'all', expiresAt: '2026-10-30T00:00:00.000Z' } })
-    expect(sc(r).data.protectedActions).toMatchObject({ allowed: false, reason: 'proof_expired', guidance: REAUTH_GUIDANCE })
+    expect(sc(r).data.protectedActions).toMatchObject({ allowed: false, reason: 'proof_expired', guidance: `${REFRESH_GUIDANCE} Or: ${REAUTH_GUIDANCE}` })
   })
 })
 

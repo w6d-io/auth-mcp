@@ -60,6 +60,7 @@ export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   execute_bulk: ['base'],
   // This connection
   revoke_my_key: ['base'],
+  refresh_second_factor: ['base'],
 }
 
 type Answer = (extra: Record<string, unknown>) => { data: Record<string, unknown>; source: string }
@@ -163,7 +164,14 @@ export function makeCanI(tools: () => readonly ToolDef[]) {
       if (def.protectedAction && !pa.allowed) {
         // The rule that triggers it: jinbe's step-up (a second factor within 15 minutes), which this
         // connection cannot stand in for now — pa.reason says why, pa.guidance what to do.
-        return answer({ wouldRefuseBecause: 'protected_actions_off', secondFactor: { rule: 'step_up', requiredAal: 'aal2', maxAgeMin: 15, permission: def.scopes[0] } })
+        // A refreshed second factor fixes it when protected actions were allowed and the proof is old or
+        // missing: point at refresh_second_factor (can_i itself creates nothing).
+        const refresh = ctx.principal.stepUpActions === true && (pa.reason === 'proof_expired' || pa.reason === 'key_created_without')
+        return answer({
+          wouldRefuseBecause: 'protected_actions_off',
+          secondFactor: { rule: 'step_up', requiredAal: 'aal2', maxAgeMin: 15, permission: def.scopes[0] },
+          ...(refresh ? { suggest: { tool: 'refresh_second_factor', why: 'It returns a link to confirm your second factor in the browser; then retry.' } } : {}),
+        })
       }
 
       if (args.arguments) {

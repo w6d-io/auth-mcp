@@ -13,6 +13,7 @@ import { capSize } from '../safety/size.js'
 import { rateKey, type RateLimiter } from '../safety/rate-limit.js'
 import type { KillSwitches } from '../safety/kill-switch.js'
 import type { KeyRevocations } from '../auth/revocations.js'
+import { withStepUpLink } from './step-up-link.js'
 
 /**
  * Every tool goes through `execute`, in this order:
@@ -175,7 +176,8 @@ export async function execute(
   } catch (err) {
     if (err instanceof ToolError) {
       outcome = err.body.code
-      return errorResult(withHint(err))
+      // A protected action refused for an old or missing second-factor proof: a link to refresh it.
+      return errorResult(await withStepUpLink(withHint(err), principal, deps.jinbe, call))
     }
     outcome = 'internal_error'
     deps.logger.error({ err, tool: def.name, requestId }, 'tool failed')

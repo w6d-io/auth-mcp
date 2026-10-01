@@ -52,6 +52,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   execute_bulk: { op: 'users.verification', planId: '6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b', planHash: HASH },
   get_bulk_job: { jobId: 'job-00001-aaaa' },
   revoke_my_key: {},
+  refresh_second_factor: {},
   simulate_grant: { userId: USER, addGroups: ['g'] },
 }
 
@@ -77,6 +78,7 @@ function happyJinbe(): typeof fetch {
     [/^GET \/api\/admin\/users\/[^/]+\/groups$/, { groups: [] }],
     [/^GET \/api\/audit\/events$/, { events: [], nextCursor: null, scope: null, range: { from: 't', to: 't' }, truncated: false }],
     [/^POST \/api\/admin\/rbac\/access-check$/, { allow: true, reason: 'ok' }],
+    [/^POST \/api\/me\/mcp\/step-up-requests$/, { __status: 201, body: { url: 'https://kuma.example.com/#/step-up/abc', expiresAt: '2026-10-01T12:00:00Z' } }],
     [/^DELETE /, { __status: 204 }],
   ]
   return (async (input: string | URL, init?: RequestInit) => {
