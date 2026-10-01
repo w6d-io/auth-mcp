@@ -249,6 +249,12 @@ export class CachingVerifier implements TokenVerifier {
     this.cache.clear()
   }
 
+  /** Verify again, bypassing (and refreshing) the cache: the second factor behind it may just have been refreshed. */
+  async verifyFresh(token: string): Promise<Principal> {
+    this.cache.delete(sha256(token))
+    return this.verify(token)
+  }
+
   /** Drop the cached principals of a key's tokens (revoked). */
   forgetKey(keyId: string): void {
     for (const [k, v] of this.cache) if (v.principal.keyId === keyId) this.cache.delete(k)

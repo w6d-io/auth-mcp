@@ -1,4 +1,4 @@
-import { defineTool, type ToolContext, type ToolDef } from '../registry.js'
+import { defineTool, freshProtectedActions, type ToolContext, type ToolDef } from '../registry.js'
 import { P } from '../permissions.js'
 import { isWriteScope } from '../../auth/scopes.js'
 import { PROTECTED_PERMISSIONS, protectedActionsOf, type ProtectedActions } from '../../auth/protected-actions.js'
@@ -49,7 +49,8 @@ export const getMyIdentity = defineTool({
   scopes: [P.MCP],
   input: {},
   async run(_args, ctx) {
-    const { principal } = ctx
+    // Re-verified once when the cached proof looks old: right after refresh_second_factor it is not.
+    const principal = await freshProtectedActions(ctx)
     const protectedActions = protectedActionsOf(principal)
     return {
       data: {

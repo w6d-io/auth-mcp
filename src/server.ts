@@ -7,6 +7,7 @@ import { CachingVerifier, DevVerifier, HydraIntrospectionVerifier, JinbeTokenInf
 import { CachingKeyExchanger, JinbeKeyExchanger } from './auth/personal-key.js'
 import { KeyRevocations } from './auth/revocations.js'
 import { checkIssuer } from './auth/issuer-check.js'
+import { withAccessToken } from './auth/types.js'
 import { parseScopeString } from './auth/scopes.js'
 import { JinbeClient } from './jinbe/client.js'
 import { KillSwitches } from './safety/kill-switch.js'
@@ -70,6 +71,8 @@ async function main() {
       responseLimitBytes: env.MCP_RESPONSE_LIMIT_BYTES,
       exposeUnwired: env.MCP_EXPOSE_UNWIRED_TOOLS,
       revocations,
+      // Bypasses the ≤30 s token cache, once per call, before a protected action is refused for an old proof.
+      reverify: async (p) => withAccessToken(await cachingVerifier.verifyFresh(p.accessToken), p.accessToken),
     },
   })
 

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { defineTool, type ToolContext, type ToolDef } from '../registry.js'
+import { defineTool, freshProtectedActions, type ToolContext, type ToolDef } from '../registry.js'
 import { P } from '../permissions.js'
 import { hasAnyScope, hasScope } from '../../auth/scopes.js'
 import { protectedActionsOf } from '../../auth/protected-actions.js'
@@ -130,6 +130,8 @@ export function makeCanI(tools: () => readonly ToolDef[]) {
     },
     async run(args, ctx) {
       const def = tools().find((t) => t.name === args.tool)
+      // A protected tool asked about with a stale proof: re-verify once (it may just have been refreshed).
+      if (def?.protectedAction) await freshProtectedActions(ctx)
       const pa = protectedActionsOf(ctx.principal)
       const answer: Answer = (extra) => ({
         data: {

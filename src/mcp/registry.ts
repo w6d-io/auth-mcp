@@ -13,7 +13,8 @@ import { capSize } from '../safety/size.js'
 import { rateKey, type RateLimiter } from '../safety/rate-limit.js'
 import type { KillSwitches } from '../safety/kill-switch.js'
 import type { KeyRevocations } from '../auth/revocations.js'
-import { withStepUpLink } from './step-up-link.js'
+import { refreshable, withStepUpLink } from './step-up-link.js'
+import { protectedActionsOf } from '../auth/protected-actions.js'
 
 /**
  * Every tool goes through `execute`, in this order:
@@ -31,6 +32,11 @@ export interface ToolDeps {
   exposeUnwired: boolean
   /** Keys revoked through this replica: the authenticator refuses them at once (revoke_my_key). */
   revocations?: KeyRevocations
+  /**
+   * The principal verified again, bypassing the token cache (≤30 s): used once per call before refusing
+   * a protected action for an old proof, so a person who just refreshed their second factor goes through.
+   */
+  reverify?: (principal: AuthenticatedPrincipal) => Promise<AuthenticatedPrincipal>
 }
 
 export interface ToolContext {
@@ -40,6 +46,27 @@ export interface ToolContext {
   revocations?: KeyRevocations
   /** The server's switches and limits, for tools that answer about this connection (get_my_identity, can_i). */
   deps?: ToolDeps
+  /** Set once the principal was re-verified in this call (at most once). */
+  reverified?: boolean
+}
+
+/**
+ * The principal with protected actions as they are NOW: re-verified once, bypassing the token cache,
+ * when the cached one says the proof is old or missing (it may just have been refreshed). Updates ctx.
+ */
+export async function freshProtectedActions(ctx: ToolContext): Promise<AuthenticatedPrincipal> {
+  const pa = protectedActionsOf(ctx.principal)
+  if (pa.allowed || ctx.reverified || !ctx.deps?.reverify || ctx.principal.stepUpActions !== true) return ctx.principal
+  if (pa.reason !== 'proof_expired' && pa.reason !== 'key_created_without') return ctx.principal
+  ctx.reverified = true
+  try {
+    const fresh = await ctx.deps.reverify(ctx.principal)
+    ctx.principal = fresh
+    ctx.call = { ...ctx.call, principal: fresh }
+  } catch {
+    // Could not re-verify: the cached view stands (the platform still decides the call).
+  }
+  return ctx.principal
 }
 
 export interface ToolOutput {
@@ -159,6 +186,7 @@ export async function execute(
 ): Promise<CallToolResult> {
   const started = Date.now()
   const call: CallContext = { principal, tool: def.name, requestId }
+  let ctx: ToolContext | undefined
   let outcome: 'ok' | string = 'ok'
   try {
     preflight(def, principal, deps)
@@ -168,16 +196,28 @@ export async function execute(
     if (!parsed.success) {
       throw toolError('invalid_request', `Invalid arguments: ${parsed.error.issues.map((i) => i.path.join('.') || '(root)').join(', ')}`)
     }
-    const ctx: ToolContext = { principal, call, jinbe: deps.jinbe, revocations: deps.revocations, deps }
+    ctx = { principal, call, jinbe: deps.jinbe, revocations: deps.revocations, deps }
     def.guard?.(parsed.data as never, ctx)
     if (def.wired === false) throw toolError('not_wired', `${def.name} is not connected to the platform yet`)
-    const out = await def.run(parsed.data as never, ctx)
+    let out: ToolOutput
+    try {
+      out = await def.run(parsed.data as never, ctx)
+    } catch (err) {
+      // Refused for an old proof: verify once more, bypassing the cache. If the person just refreshed
+      // their second factor, run again once with the fresh principal; otherwise the refusal stands.
+      if (!(err instanceof ToolError) || !refreshable(err.body, ctx.principal)) throw err
+      const before = ctx.principal
+      const fresh = await freshProtectedActions(ctx)
+      if (fresh === before || !protectedActionsOf(fresh).allowed) throw err
+      out = await def.run(retryArgs(parsed.data as Record<string, unknown>) as never, ctx)
+    }
     return successResult(out, deps.responseLimitBytes)
   } catch (err) {
     if (err instanceof ToolError) {
       outcome = err.body.code
       // A protected action refused for an old or missing second-factor proof: a link to refresh it.
-      return errorResult(await withStepUpLink(withHint(err), principal, deps.jinbe, call))
+      const who = ctx?.principal ?? principal
+      return errorResult(await withStepUpLink(withHint(err), who, deps.jinbe, ctx?.call ?? call))
     }
     outcome = 'internal_error'
     deps.logger.error({ err, tool: def.name, requestId }, 'tool failed')
@@ -228,6 +268,16 @@ function hideFromList(server: McpServer, hidden: ReadonlySet<string>, registered
     const out = await list(request, extra)
     return { ...out, tools: out.tools.filter((t) => !hidden.has(t.name)) }
   })
+}
+
+/**
+ * The arguments of the one retry after a re-verification. jinbe recorded the refusal under the caller's
+ * Idempotency-Key (and would replay it), so the retry uses a key derived from it: still deterministic,
+ * so a client retrying the whole call is deduplicated too. Without a caller key, each write makes its own.
+ */
+function retryArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const key = args.idempotencyKey
+  return typeof key === 'string' ? { ...args, idempotencyKey: `${key.slice(0, 61)}-r1` } : args
 }
 
 /** Register the tools on a per-request server; returns the names LISTED to this principal. */

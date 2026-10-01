@@ -19,7 +19,7 @@ describe('refresh_second_factor', () => {
     const r = await execute(refreshSecondFactor, {}, expiredKey, deps(jinbe.fetchImpl))
     expect(sc(r).data).toEqual(LINK)
     expect(sc(r).notes[0]).toBe('Open this link and confirm with your second factor, then tell me to try again.')
-    expect(sc(r).notes[1]).toMatch(/30 seconds/)
+    expect(sc(r).notes[1]).toMatch(/afresh/)
     expect(jinbe.calls[0].body).toBeUndefined()
     expect(jinbe.calls[0].headers['idempotency-key']).toBeDefined()
   })
@@ -96,5 +96,52 @@ describe('step-up link API refusals (jinbe wave20/step-up-refresh)', () => {
     const jinbe = mockJinbe({ 'POST /api/me/mcp/step-up-requests': () => ({ status: 403, body: { error: 'protected_actions_off', message: 'An administrator turned protected actions off for assistants.' } }) })
     const r = await execute(refreshSecondFactor, {}, expiredKey, deps(jinbe.fetchImpl))
     expect(sc(r).error).toMatchObject({ code: 'protected_actions_off', message: 'An administrator turned protected actions off for assistants.' })
+  })
+})
+
+describe('re-verify once before refusing for an old proof (no 30 s lag after a refresh)', () => {
+  const fresh = principal({ ...expiredKey, stepUpAt: new Date().toISOString() } as never)
+
+  it('jinbe refused on the stale view; re-verified fresh: the call runs again once and succeeds', async () => {
+    let applies = 0
+    const jinbe = mockJinbe({
+      'POST /api/admin/sites/billing/apply': (req) => (++applies === 1 ? stepUpRefusal('key_step_up_expired')() : { body: { id: 'a-1', state: 'running', key: req.headers['idempotency-key'] } }),
+    })
+    let reverified = 0
+    const d = deps(jinbe.fetchImpl, { reverify: async () => (reverified++, fresh) })
+    const r = await execute(publishSite, { name: 'billing', version: 2, idempotencyKey: 'publish-0001' }, expiredKey, d)
+    expect(r.isError).toBeUndefined()
+    expect(reverified).toBe(1)
+    expect(applies).toBe(2)
+    // jinbe recorded the refusal under the caller's key: the retry uses a key derived from it.
+    expect(jinbe.calls.map((c) => c.headers['idempotency-key'])).toEqual(['publish-0001', 'publish-0001-r1'])
+  })
+
+  it('still stale after re-verifying: one re-verify, no second run, the refusal (with its link) stands', async () => {
+    let applies = 0
+    const jinbe = mockJinbe({ 'POST /api/admin/sites/billing/apply': () => (applies++, stepUpRefusal('key_step_up_expired')()), 'POST /api/me/mcp/step-up-requests': () => ({ status: 201, body: LINK }) })
+    let reverified = 0
+    const r = await execute(publishSite, { name: 'billing', version: 2 }, expiredKey, deps(jinbe.fetchImpl, { reverify: async (p) => (reverified++, p) }))
+    expect(sc(r).error.code).toBe('protected_actions_off')
+    expect(sc(r).error.details.stepUpLink).toEqual(LINK)
+    expect([reverified, applies]).toEqual([1, 1])
+  })
+
+  it('not for refusals a refresh cannot fix, and never when re-verifying fails', async () => {
+    let reverified = 0
+    const jinbe = mockJinbe({ 'POST /api/admin/sites/billing/apply': stepUpRefusal('step_up_actions_off') })
+    await execute(publishSite, { name: 'billing', version: 2 }, expiredKey, deps(jinbe.fetchImpl, { reverify: async () => (reverified++, fresh) }))
+    expect(reverified).toBe(0)
+    const broken = mockJinbe({ 'POST /api/admin/sites/billing/apply': stepUpRefusal('no_key_step_up') })
+    const r = await execute(publishSite, { name: 'billing', version: 2 }, expiredKey, deps(broken.fetchImpl, { reverify: async () => { throw new Error('jinbe down') } }))
+    expect(sc(r).error.code).toBe('protected_actions_off')
+  })
+
+  it('can_i and get_my_identity see the refreshed proof at once', async () => {
+    const jinbe = mockJinbe({})
+    const d = deps(jinbe.fetchImpl, { reverify: async () => fresh })
+    expect(sc(await execute(canI, { tool: 'publish_site' }, expiredKey, d)).data).toMatchObject({ protectedActionsAllowed: true })
+    const { getMyIdentity } = await import('../../mcp/tools/identity.js')
+    expect(sc(await execute(getMyIdentity, {}, expiredKey, d)).data.protectedActions.allowed).toBe(true)
   })
 })
