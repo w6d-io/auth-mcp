@@ -149,6 +149,11 @@ const UPSTREAM_CODES: Record<string, ToolErrorCode> = {
   privilege_escalation_blocked: 'forbidden',
   // A group whose "Members must use 2FA" switch is on refuses a person with no second factor.
   mfa_required: 'mfa_required',
+  // The step-up link API (jinbe wave20/step-up-refresh): the connection was made without protected
+  // actions (409), or an administrator turned them off (403).
+  protected_actions_not_allowed: 'protected_actions_off',
+  protected_actions_off: 'protected_actions_off',
+  not_delegated: 'invalid_request',
   // requireServiceAdmin refusals (jinbe wave19/admin-explain): the grant-guard shape, OPA's reason.
   needs_2fa: 'needs_2fa',
   route_not_published: 'not_found',
@@ -303,8 +308,9 @@ export function fromJinbe(status: number, body: unknown, retryAfter?: string | n
   }
   const keyReason = (body as { secondFactor?: { keyReason?: unknown } } | null)?.secondFactor?.keyReason
   if (code === 'protected_actions_off' && typeof keyReason === 'string' && CONSOLE_ONLY_KEY_REASONS.has(keyReason)) code = 'needs_2fa'
-  if (code === 'protected_actions_off' || code === 'needs_2fa') {
-    // jinbe's generic text says "prove it in a browser"; the key reason says what THIS connection can do.
+  // Only the step-up refusals carry jinbe's generic "prove it in a browser" text: replaced with what THIS
+  // connection can do. Other protected-actions answers (the step-up link API) keep jinbe's own message.
+  if ((code === 'protected_actions_off' || code === 'needs_2fa') && (upstream === 'step_up_unavailable' || upstream === 'reauth_required' || keyReason !== undefined)) {
     message =
       (typeof keyReason === 'string' && KEY_REASON_MESSAGES[keyReason]) ||
       'This is a protected action and this connection may not do it now: create a new key with protected actions allowed, or (browser sign-in) sign in again and allow them'

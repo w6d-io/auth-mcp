@@ -16,7 +16,9 @@ export interface StepUpLink {
 }
 
 export const STEP_UP_PATH = '/api/me/mcp/step-up-requests'
-export const STEP_UP_NOTE = 'Open this link, confirm your second factor, then tell me to retry.'
+export const STEP_UP_NOTE = 'Open this link and confirm with your second factor, then tell me to try again.'
+/** jinbe drops its cache at once; auth-mcp's own token cache may hold the old proof for up to 30 s. */
+export const STEP_UP_LAG = 'If it is still refused right after, wait up to 30 seconds and try again.'
 
 /** Only an https link is shown: it comes from jinbe, but a person clicks it. */
 function linkOf(body: unknown): StepUpLink | null {
@@ -32,9 +34,13 @@ function linkOf(body: unknown): StepUpLink | null {
   return { url: u.toString(), expiresAt: typeof b.expiresAt === 'string' ? b.expiresAt : null }
 }
 
-/** Create a link; throws the tool error jinbe answered with. */
+/**
+ * Create a link (no body: jinbe binds it to this user and this client); throws the tool error jinbe
+ * answered with — 409 protected_actions_not_allowed for a connection made without protected actions,
+ * 429 past 5 links per 10 minutes.
+ */
 export async function createStepUpLink(jinbe: JinbeClient, call: CallContext): Promise<StepUpLink> {
-  const res = await jinbe.write<unknown>(call, 'POST', STEP_UP_PATH, { body: {} })
+  const res = await jinbe.write<unknown>(call, 'POST', STEP_UP_PATH)
   const link = linkOf(res.body)
   if (!link) throw new ToolError({ code: 'upstream_unavailable', message: 'The platform did not return a usable link', retryable: true })
   return link

@@ -18,8 +18,9 @@ describe('refresh_second_factor', () => {
     const jinbe = mockJinbe({ 'POST /api/me/mcp/step-up-requests': () => ({ status: 201, body: LINK }) })
     const r = await execute(refreshSecondFactor, {}, expiredKey, deps(jinbe.fetchImpl))
     expect(sc(r).data).toEqual(LINK)
-    expect(sc(r).notes[0]).toBe('Open this link, confirm your second factor, then tell me to retry.')
-    expect(jinbe.calls[0].body).toEqual({})
+    expect(sc(r).notes[0]).toBe('Open this link and confirm with your second factor, then tell me to try again.')
+    expect(sc(r).notes[1]).toMatch(/30 seconds/)
+    expect(jinbe.calls[0].body).toBeUndefined()
     expect(jinbe.calls[0].headers['idempotency-key']).toBeDefined()
   })
 
@@ -41,7 +42,7 @@ describe('a refused protected action carries the link when a refresh fixes it', 
     const r = await execute(publishSite, { name: 'billing', version: 2 }, expiredKey, deps(jinbe.fetchImpl))
     expect(sc(r).error.code).toBe('protected_actions_off')
     expect(sc(r).error.details.stepUpLink).toEqual(LINK)
-    expect(sc(r).error.hint).toBe(`Open this link, confirm your second factor, then tell me to retry. ${LINK.url} (valid until ${LINK.expiresAt})`)
+    expect(sc(r).error.hint).toBe(`Open this link and confirm with your second factor, then tell me to try again. ${LINK.url} (valid until ${LINK.expiresAt})`)
   })
 
   it('no link for step_up_actions_off, for a console-only action, or when the key was made without them', async () => {
@@ -74,5 +75,26 @@ describe('can_i suggests the refresh (and creates nothing itself)', () => {
     const r = await execute(canI, { tool: 'publish_site' }, expiredKey, deps(jinbe.fetchImpl))
     expect(sc(r).data).toMatchObject({ wouldRefuseBecause: 'protected_actions_off', suggest: { tool: 'refresh_second_factor' } })
     expect(jinbe.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+  })
+})
+
+describe('step-up link API refusals (jinbe wave20/step-up-refresh)', () => {
+  it('409 protected_actions_not_allowed relays jinbe\'s message under protected_actions_off', async () => {
+    const jinbe = mockJinbe({ 'POST /api/me/mcp/step-up-requests': () => ({ status: 409, body: { error: 'protected_actions_not_allowed', message: 'This sign-in was consented without protected actions: reconnect and tick them.' } }) })
+    const r = await execute(refreshSecondFactor, {}, expiredKey, deps(jinbe.fetchImpl))
+    expect(sc(r).error).toMatchObject({ code: 'protected_actions_off', message: 'This sign-in was consented without protected actions: reconnect and tick them.', upstream: 'protected_actions_not_allowed' })
+  })
+
+  it('429: reuse the last link', async () => {
+    const jinbe = mockJinbe({ 'POST /api/me/mcp/step-up-requests': () => ({ status: 429, body: { error: 'rate_limited' }, headers: { 'retry-after': '120' } }) })
+    const r = await execute(refreshSecondFactor, {}, expiredKey, deps(jinbe.fetchImpl))
+    expect(sc(r).error).toMatchObject({ code: 'rate_limited', retryAfterSec: 120 })
+    expect(sc(r).error.hint).toMatch(/use the last link/)
+  })
+
+  it('403 protected_actions_off (admin switch) keeps jinbe\'s message', async () => {
+    const jinbe = mockJinbe({ 'POST /api/me/mcp/step-up-requests': () => ({ status: 403, body: { error: 'protected_actions_off', message: 'An administrator turned protected actions off for assistants.' } }) })
+    const r = await execute(refreshSecondFactor, {}, expiredKey, deps(jinbe.fetchImpl))
+    expect(sc(r).error).toMatchObject({ code: 'protected_actions_off', message: 'An administrator turned protected actions off for assistants.' })
   })
 })
