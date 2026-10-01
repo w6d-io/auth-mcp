@@ -281,8 +281,13 @@ export const CASES = [
         gates: [{ id: 'api', label: 'API', who: 'tokens', pass: 'policy', gets: 'identity', fails: 'api', preflight: true }],
       })
       if (!step('create', created, (d) => Array.isArray(d.accessChecklist) && d.accessChecklist.length >= 4)) return done(false)
-      // 2. access: the run's group gets viewer, a second factor on writes, a permission-gated catch-all
-      if (!step('access', await c.mcp.developer.call('set_site_access', { name, groups: { [c.group]: ['viewer'] }, twoFactor: 'writes' }))) return done(false)
+      // 2. access: R-OB's OWN group (empty: it needs no site roles, which a new site does not have yet)
+      // gets viewer, a second factor on writes, a permission-gated catch-all. Self-contained: it does not
+      // depend on R-A2's group, which needs an applied site.
+      const group = `${c.group}_ob`
+      c.state.add('groups', { name: group })
+      if (!step('group', await c.mcp.admin.call('create_group', { name: group, services: {} }))) return done(false)
+      if (!step('access', await c.mcp.developer.call('set_site_access', { name, groups: { [group]: ['viewer'] }, twoFactor: 'writes' }))) return done(false)
       if (!step('routes', await c.mcp.developer.call('update_site_routes', { name, catchAll: { gate: 'browser', access: { kind: 'permission', permission: `${name}:read` } } }))) return done(false)
       // 3. check: no high lint finding, publishing not blocked by an error finding; the confirm codes are
       // what publish must acknowledge (the e2e plays the person accepting them)

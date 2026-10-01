@@ -140,6 +140,10 @@ export const checkSiteDraft = defineTool({
           ...(p.resolvedGates !== undefined ? { resolvedGates: p.resolvedGates } : {}),
         }
         if (p.publish?.blocked) notes.push('Publishing is blocked: fix every finding of level error first (each says how in fix).')
+        // Platform checks that refuse the apply (unknown group, route tie, host taken…): said too, so a
+        // draft that can never be applied does not look ready.
+        const blocking = (p.checks ?? []).filter((c) => c.level === 'error')
+        if (blocking.length) notes.push(`This draft cannot be applied as it is: ${blocking.slice(0, 5).map((c) => `${c.code}${c.path ? ` at ${c.path}` : ''}`).join(', ')} (preview.checks).`)
         if (p.publish?.acknowledge?.length) {
           notes.push(`Before publishing, show the person the confirm findings (${p.publish.acknowledge.join(', ')}) and pass the ones they accept to publish_site as acknowledge.`)
         }

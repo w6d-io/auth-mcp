@@ -162,3 +162,14 @@ describe('match_request, render_template', () => {
     expect(sc(r).error.code).toBe('insufficient_scope')
   })
 })
+
+describe('check_site_draft says when a draft cannot be applied', () => {
+  it('error-level platform checks are named in the notes', async () => {
+    const { checkSiteDraft } = await import('../../mcp/tools/sites.js')
+    const jinbe = mockJinbe({
+      'POST /api/admin/sites/preview': { checks: [{ level: 'error', code: 'unknown_group', message: "platform group 'g' does not exist", path: 'groups.platform.g' }], risk: { flags: [] }, words: [], findings: [], publish: { blocked: false, acknowledge: [] } },
+    })
+    const r = await execute(checkSiteDraft, { site: { name: 'x' } }, principal(), deps(jinbe.fetchImpl))
+    expect(sc(r).notes.join(' ')).toMatch(/cannot be applied as it is: unknown_group at groups.platform.g/)
+  })
+})
