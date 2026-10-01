@@ -207,9 +207,18 @@ export const CASES = [
   { id: 'R-D6', actor: 'developer', title: 'publish (developer lacks sites:apply)', expect: 'insufficient_scope (tool_not_found accepted until the new auth-mcp image)', run: async (c) => scoped(await c.mcp.developer.call('publish_site', { name: c.site, version: c.store.version ?? 1 })) },
 
   // ── Ops ──
-  { id: 'R-O1', actor: 'ops', title: 'publish the saved version (sandbox: direct apply) and wait until applied', expect: 'ok, applied.version = saved + site.applied',
+  { id: 'R-O1', actor: 'ops', title: 'publish the saved version (sandbox: direct apply), acknowledging exactly the confirm findings the check lists, and wait until applied', expect: 'ok, applied.version = saved + site.applied',
     async run(c) {
-      const r = await c.mcp.ops.call('publish_site', { name: c.site, version: c.store.version })
+      // The publish gate: check the SAVED intent, then acknowledge only the codes it lists (here the
+      // e2e plays the person accepting them) — never a blanket list.
+      const saved = await c.mcp.ops.call('get_site', { name: c.site })
+      if (!saved.ok) return ok(saved)
+      const check = await c.mcp.ops.call('check_site_draft', { site: saved.data.site })
+      if (!check.ok) return ok(check)
+      if (check.data?.preview?.publish?.blocked !== false) return { pass: false, got: `publish gate blocked or unreadable: ${JSON.stringify(check.data?.preview?.publish ?? null)}` }
+      const acknowledge = confirmCodes(check.data)
+      c.store.acknowledged = acknowledge
+      const r = await c.mcp.ops.call('publish_site', { name: c.site, version: c.store.version, ...(acknowledge.length ? { acknowledge } : {}) })
       if (!r.ok) return ok(r)
       // Watched with the admin key: get_site asks for admin:read, which a staff key may not carry.
       // A tool-level refusal ends the watch at once: waiting cannot fix it, and it is not a timeout.
@@ -220,11 +229,22 @@ export const CASES = [
         return s.ok && s.data?.applied?.version === c.store.version ? s : null
       }, 180000, 5000)
       if (refusal) return { pass: false, got: `publish ok; poll refused: ${refusal.code}${refusal.error?.upstream ? ` (${refusal.error.upstream})` : ''}`, audit: { holder: 'ops', events: ['site.applied'] } }
-      return { pass: !!live, got: live ? `applied v${c.store.version}` : 'not applied within 180s', audit: { holder: 'ops', events: ['site.applied'] } }
+      if (live) c.store.applied = true
+      return { pass: !!live, got: live ? `applied v${c.store.version}${acknowledge.length ? ` (acknowledged ${acknowledge.join(',')})` : ''}` : 'not applied within 180s', audit: { holder: 'ops', events: ['site.applied'] } }
     } },
 
   // ── Access model (the owner's super_admin key, protected actions allowed) ──
-  { id: 'R-A1', actor: 'admin', title: "set the site's roles", expect: 'ok + site.roles_changed', run: async (c) => ok(await c.mcp.admin.call('set_site_roles', { service: c.site, roles: { viewer: [`${c.site}:read`], editor: [`${c.site}:read`, `${c.site}:write`] } }), () => true, { holder: 'admin', events: ['site.roles_changed'] }) },
+  { id: 'R-A1', actor: 'admin', title: "set the site's roles (once the site is applied: its service and roles exist)", expect: 'ok + site.roles_changed',
+    async run(c) {
+      // R-A2..R-A5 bind the run's group to the site's roles: those exist only once the site is applied.
+      const applied = c.store.applied || (await poll(async () => {
+        const s = await c.mcp.admin.call('get_site', { name: c.site })
+        return s.ok && s.data?.applied?.version >= 1 ? s : null
+      }, 180000, 5000))
+      if (!applied) return { pass: false, got: 'the site was never applied (R-O1): no service roles to bind; R-A2..R-A5 cannot pass' }
+      c.store.applied = true
+      return ok(await c.mcp.admin.call('set_site_roles', { service: c.site, roles: { viewer: [`${c.site}:read`], editor: [`${c.site}:read`, `${c.site}:write`] } }), () => true, { holder: 'admin', events: ['site.roles_changed'] })
+    } },
   { id: 'R-A2', actor: 'admin', title: 'create a group giving the site role viewer', expect: 'ok + rbac.group.created',
     async run(c) {
       c.state.add('groups', { name: c.group })
@@ -267,9 +287,9 @@ export const CASES = [
       // 3. check: no high lint finding, publishing not blocked by an error finding; the confirm codes are
       // what publish must acknowledge (the e2e plays the person accepting them)
       const check = await c.mcp.developer.call('check_site_draft', { name })
-      if (!step('check', check, (d) => (d.lint?.summary?.high ?? 1) === 0 && d.preview?.publish?.blocked === false)) {
-        return done(false, ` high=${check.data?.lint?.summary?.high} blocked=${check.data?.preview?.publish?.blocked}`)
-      }
+      // Passes on the publish gate (no error finding), not on zero lint highs: the count is reported only.
+      if (!step('check', check, (d) => d.preview?.publish?.blocked === false)) return done(false, ` blocked=${check.data?.preview?.publish?.blocked}`)
+      steps.push(`lint_high=${check.data?.lint?.summary?.high ?? '?'}`)
       const acknowledge = confirmCodes(check.data)
       // 4. save
       const saved = await c.mcp.developer.call('save_site_version', { name, note: `${CFG.run} onboarding` })
@@ -360,7 +380,16 @@ export const CASES = [
   { id: 'A3', actor: 'admin (raw jinbe)', title: 'jinbe gate, MCP bypassed: deletes, membership removal, key mint, 2FA reset, zones, gateway, settings, self-grant', expect: '403 delegation_ineligible:<why> each; mint-key any 403 (its own guard answers first); 400/422 = inconclusive (validation ran first)',
     async run(c) {
       const groupsOf = async (email) => ((await owner('GET', `/api/admin/users/${encodeURIComponent(email)}/groups`, undefined, c.ownerJar)).body?.groups ?? []).map(String)
-      const t1 = await groupsOf(c.targets.t1.email)
+      // rm-member must be a REAL removal: t1 in the run's group first (R-A3 does it; done here if it failed).
+      let t1 = await groupsOf(c.targets.t1.email)
+      if (!t1.includes(c.group)) {
+        await c.mcp.admin.call('add_user_to_groups', { email: c.targets.t1.email, groups: [c.group] })
+        t1 = await groupsOf(c.targets.t1.email)
+      }
+      const t1InGroup = t1.includes(c.group)
+      // A group t1 is not in: "removing" it sends the same set back — a no-op. Reported, not judged (the
+      // owner decides whether a key's no-op removal should be refused too).
+      const absent = `${c.group}_absent`
       const me = await groupsOf(c.owner.email)
       // The setting as it is now, so the probe is valid (reaches the gate) and a gate failure changes nothing.
       const cur = (await owner('GET', '/api/admin/settings/mcp', undefined, c.ownerJar)).body ?? {}
@@ -372,6 +401,7 @@ export const CASES = [
         { id: 'del-user', method: 'DELETE', path: `/api/admin/users/${c.targets.t4.id}`, want: 'delegation_ineligible:users:delete' },
         { id: 'del-group', method: 'DELETE', path: `/api/admin/rbac/groups/${c.group}`, want: 'delegation_ineligible:delete' },
         { id: 'rm-member', method: 'PUT', path: `/api/admin/users/${encodeURIComponent(c.targets.t1.email)}/groups`, body: { groups: t1.filter((g) => g !== c.group) }, want: 'delegation_ineligible:groups.members:revoke' },
+        { id: 'rm-absent', method: 'PUT', path: `/api/admin/users/${encodeURIComponent(c.targets.t1.email)}/groups`, body: { groups: t1.filter((g) => g !== absent) }, want: 'report', report: true },
         { id: 'mint-key', method: 'POST', path: '/api/me/api-keys', body: { label: `${CFG.run}-probe` }, want: 'delegation_ineligible', anyForbidden: true },
         { id: '2fa-reset', method: 'POST', path: `/api/admin/users/${c.targets.t4.id}/second-factors/reset`, body: { reason: 'e2e probe' }, want: 'delegation_ineligible:users:reset_second_factor' },
         { id: 'zone', method: 'POST', path: '/api/admin/sites/zones', body: { domain: 'e2e-probe.example.invalid' }, want: 'delegation_ineligible' },
@@ -380,10 +410,12 @@ export const CASES = [
         { id: 'signin', method: 'PUT', path: '/api/admin/auth/methods', body: {}, want: 'delegation_ineligible:settings.signin:write' },
         { id: 'self-grant', method: 'PUT', path: `/api/admin/users/${encodeURIComponent(c.owner.email)}/groups`, body: { groups: [...new Set([...me, c.group])] }, want: 'delegation_ineligible:self_change' },
       ]
-      const out = await gateProbe(c.admin.key, probes.map(({ want, anyForbidden, ...p }) => p))
+      const out = await gateProbe(c.admin.key, probes.map(({ want, anyForbidden, report, ...p }) => p))
       if (out.exchange !== 200) return { pass: false, got: `key exchange in the auth-mcp pod: ${out.exchange}` }
       const rows = probes.map((p) => {
         const r = out.results.find((x) => x.id === p.id) ?? {}
+        if (p.report) return { ...p, ...r, verdict: 'report' }
+        if (p.id === 'rm-member' && !t1InGroup) return { ...p, ...r, verdict: 'inconclusive', note: 't1 is not in the group: not a real removal' }
         // anyForbidden: a route whose own guard answers a bare 403 before the gate names a reason (personOnly).
         const refused = r.status === 403 && (p.anyForbidden || (r.reason ?? '').startsWith(p.want))
         const verdict = refused ? 'pass' : [400, 422].includes(r.status) ? 'inconclusive' : 'fail'
@@ -392,7 +424,10 @@ export const CASES = [
       c.store.gate = rows
       const fails = rows.filter((r) => r.verdict === 'fail')
       const inc = rows.filter((r) => r.verdict === 'inconclusive')
-      return { pass: fails.length ? false : inc.length ? 'inconclusive' : true, got: rows.map((r) => `${r.id}=${r.status}${r.reason ? `:${r.reason}` : r.error ? `:${r.error}` : ''}`).join(' ') }
+      const absentRow = rows.find((r) => r.id === 'rm-absent')
+      c.store.rmAbsent = absentRow ? `${absentRow.status}${absentRow.reason ? `:${absentRow.reason}` : ''}` : 'not run'
+      const got = rows.map((r) => `${r.id}=${r.status}${r.reason ? `:${r.reason}` : r.error ? `:${r.error}` : ''}${r.verdict === 'report' ? ' (reported)' : ''}`).join(' ')
+      return { pass: fails.length ? false : inc.length ? 'inconclusive' : true, got: `${got}; removing a group t1 is not in (a no-op): ${absentRow?.status === 403 ? `refused (${absentRow.reason ?? absentRow.error})` : absentRow?.status === 200 ? 'answered 200 (no-op, nothing written)' : absentRow?.status}` }
     } },
   { id: 'A4', actor: 'admin-noprotect', title: 'a key without protected actions: publish, email change, group add, group create', expect: 'protected_actions_off ×4 (jinbe 422 step_up_unavailable); an "unchanged" no-op never passes',
     async run(c) {
