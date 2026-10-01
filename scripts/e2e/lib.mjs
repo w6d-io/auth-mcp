@@ -223,6 +223,20 @@ export function classify(res) {
   return { ok: false, code, error: err ?? null, text, raw: res }
 }
 
+/**
+ * A refusal in one line for the report: code (upstream), message, and the first check or finding jinbe
+ * gave — enough to tell checks_failed/unknown_group from invalid_site/handler_disabled without the log.
+ */
+export function why(r) {
+  if (r?.ok) return 'ok'
+  const e = r?.error ?? {}
+  const d = e.details ?? {}
+  const first = [d.checks?.[0], d.findings?.[0], d.issues?.[0]].find(Boolean)
+  const detail = first ? ` [${first.code ?? first.level ?? ''}${first.path ? ` at ${first.path}` : ''}: ${String(first.message ?? '').slice(0, 140)}]` : ''
+  const message = String(e.message ?? r?.text ?? '').slice(0, 200)
+  return `${r?.code}${e.upstream ? ` (${e.upstream})` : ''}${e.status ? ` ${e.status}` : ''}: ${message}${detail}`
+}
+
 /** One MCP connection per key. Rate-limited calls are retried after retryAfterSec unless told not to. */
 export class Mcp {
   constructor(role, key) {
