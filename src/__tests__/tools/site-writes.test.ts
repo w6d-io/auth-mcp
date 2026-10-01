@@ -58,7 +58,7 @@ describe('save_site_draft', () => {
   it('PUTs the draft and refuses a draft naming another site locally', async () => {
     const jinbe = mockJinbe({ [`PUT ${S}/billing/draft`]: { baseVersion: 3, updatedAt: 'now' } })
     const ok = await execute(saveSiteDraft, { name: 'billing', site: site(), idempotencyKey: 'my-key-123' }, writer, deps(jinbe.fetchImpl))
-    expect(sc(ok).data.draft).toEqual({ baseVersion: 3, updatedAt: 'now' })
+    expect(sc(ok).data.draft).toEqual({ baseVersion: 3, updatedAt: 'now', etag: null })
     expect(jinbe.calls[0].headers['idempotency-key']).toBe('my-key-123')
     const bad = await execute(saveSiteDraft, { name: 'billing', site: { ...site(), name: 'payroll' } }, writer, deps(jinbe.fetchImpl))
     expect(sc(bad).error.code).toBe('invalid_request')
@@ -199,16 +199,80 @@ describe('import_openapi', () => {
     expect(sc(b).error.details.checks[0].path).toBe('deleteAll')
   })
 
-  it('refuses without spec or commit, duplicate decisions, and a spec over 256 KB, before any call', async () => {
+  it('refuses without spec or commit, duplicate decisions, and a spec over 5 MiB, before any call', async () => {
     const jinbe = mockJinbe({})
     for (const args of [
       { name: 'billing' },
       { name: 'billing', spec: 'x', decisions: [{ op: 'a' }, { op: 'a' }] },
-      { name: 'billing', spec: 'x'.repeat(256 * 1024 + 1) },
+      { name: 'billing', spec: 'x'.repeat(5 * 1024 * 1024 + 1) },
     ]) {
       const r = await execute(importOpenapi, args, writer, deps(jinbe.fetchImpl))
       expect(sc(r).error.code).toBe('invalid_request')
     }
     expect(jinbe.calls).toHaveLength(0)
+  })
+})
+
+describe('draft etags (jinbe wave21): If-Match from the read, never an overwrite', () => {
+  const draftAt = (etag: string) => ({ site: site([r1]), baseVersion: 3, etag, updatedAt: 't1' })
+
+  it('update_site_routes sends If-Match = the etag of the draft it read, and returns the new one', async () => {
+    const jinbe = mockJinbe({ [`GET ${S}/billing/draft`]: draftAt('d-1'), [`GET ${S}/billing`]: saved([r1]), [`PUT ${S}/billing/draft`]: { baseVersion: 3, updatedAt: 't2', etag: 'd-2' } })
+    const r = await execute(updateSiteRoutes, { name: 'billing', change: [{ id: 'list', access: { kind: 'signed-in' } }] }, writer, deps(jinbe.fetchImpl))
+    expect(jinbe.calls.find((c) => c.method === 'PUT')!.headers['if-match']).toBe('"d-1"')
+    expect(sc(r).data.draft.etag).toBe('d-2')
+  })
+
+  it('no draft yet (starting from the saved site): no If-Match', async () => {
+    const jinbe = mockJinbe({ [`GET ${S}/billing/draft`]: () => ({ status: 404, body: { error: 'not_found' } }), [`GET ${S}/billing`]: saved([r1]), [`PUT ${S}/billing/draft`]: { etag: 'd-1' } })
+    await execute(updateSiteRoutes, { name: 'billing', remove: ['list'] }, writer, deps(jinbe.fetchImpl))
+    expect(jinbe.calls.find((c) => c.method === 'PUT')!.headers['if-match']).toBeUndefined()
+  })
+
+  it('412 stale_draft: a conflict naming when it was saved, without who; no retry, no overwrite', async () => {
+    const jinbe = mockJinbe({
+      [`GET ${S}/billing/draft`]: draftAt('d-1'),
+      [`GET ${S}/billing`]: saved([r1]),
+      [`PUT ${S}/billing/draft`]: () => ({ status: 412, body: { error: 'stale_draft', message: 'stale', current: { etag: 'd-9', updatedBy: 'bob@example.com', updatedAt: '2026-10-01T10:00:00Z' } } }),
+    })
+    const r = await execute(updateSiteRoutes, { name: 'billing', remove: ['list'] }, writer, deps(jinbe.fetchImpl))
+    expect(sc(r).error).toMatchObject({ code: 'conflict', upstream: 'stale_draft', details: { current: { etag: 'd-9', updatedAt: '2026-10-01T10:00:00Z' } } })
+    expect(sc(r).error.message).toMatch(/Someone saved this draft at 2026-10-01T10:00:00Z.*nothing was overwritten/)
+    expect(JSON.stringify(sc(r))).not.toContain('bob@example.com')
+    expect(jinbe.calls.filter((c) => c.method === 'PUT')).toHaveLength(1)
+  })
+
+  it('save_site_draft passes the caller\'s draftEtag; 428 says to read and pass it', async () => {
+    const jinbe = mockJinbe({ [`PUT ${S}/billing/draft`]: () => ({ status: 428, body: { error: 'precondition_required', message: 'If-Match required' } }) })
+    const r = await execute(saveSiteDraft, { name: 'billing', site: site(), draftEtag: 'd-1' }, writer, deps(jinbe.fetchImpl))
+    expect(jinbe.calls[0].headers['if-match']).toBe('"d-1"')
+    expect(sc(r).error).toMatchObject({ code: 'conflict', upstream: 'precondition_required' })
+    expect(sc(r).error.message).toMatch(/pass its etag \(draftEtag\)/)
+  })
+})
+
+describe('wave21: info findings, 400 details, big specs', () => {
+  it('a 400 carries details[{field, path, message}] and the readable message', async () => {
+    const jinbe = mockJinbe({ [`PUT ${S}/billing/draft`]: () => ({ status: 400, body: { error: 'invalid_request', message: 'The request is not valid: site.name: required', details: [{ field: 'name', path: 'site.name', message: 'required' }], issues: [] } }) })
+    const r = await execute(saveSiteDraft, { name: 'billing', site: {} }, writer, deps(jinbe.fetchImpl))
+    expect(sc(r).error).toMatchObject({ code: 'invalid_request', message: 'The request is not valid: site.name: required', details: { details: [{ field: 'name', path: 'site.name', message: 'required' }] } })
+  })
+
+  it('info findings pass through and never block', async () => {
+    const { checkSiteDraft } = await import('../../mcp/tools/sites.js')
+    const jinbe = mockJinbe({ [`POST ${S}/preview`]: { checks: [], risk: { flags: [] }, words: [], findings: [{ code: 'preserve_host_off', level: 'info', message: 'm', fix: 'f' }], publish: { blocked: false, acknowledge: [] } } })
+    const r = await execute(checkSiteDraft, { site: site() }, writer, deps(jinbe.fetchImpl))
+    expect(sc(r).data.preview.findings[0]).toMatchObject({ code: 'preserve_host_off', level: 'info' })
+    expect(sc(r).data.preview.publish.blocked).toBe(false)
+  })
+
+  it('a spec over ~120 KiB: accepted up to 5 MiB, with the edge-limit hint (note on success, hint on refusal)', async () => {
+    const big = `{"openapi":"3.0.0","x":"${'a'.repeat(130 * 1024)}"}`
+    const okJinbe = mockJinbe({ [`POST ${S}/billing/import/preview`]: { spec: { sha256: 'a'.repeat(64) }, base: { etag: 'b'.repeat(16) }, rows: [] } })
+    const ok = await execute(importOpenapi, { name: 'billing', spec: big }, writer, deps(okJinbe.fetchImpl))
+    expect(sc(ok).notes[0]).toMatch(/console upload, or wait for the platform limit fix/)
+    const refused = mockJinbe({ [`POST ${S}/billing/import/preview`]: () => ({ status: 413, body: { error: 'payload_too_large' } }) })
+    const r = await execute(importOpenapi, { name: 'billing', spec: big }, writer, deps(refused.fetchImpl))
+    expect(sc(r).error.hint).toMatch(/console upload/)
   })
 })

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { defineTool, type ToolDef } from '../registry.js'
 import { P } from '../permissions.js'
 import { seg } from '../../jinbe/client.js'
-import { toolError } from '../../safety/errors.js'
+import { ToolError, toolError } from '../../safety/errors.js'
 import { SITES, idempotencyKey, obj, siteName, withoutActors } from './write-common.js'
 
 /**
@@ -14,11 +14,14 @@ import { SITES, idempotencyKey, obj, siteName, withoutActors } from './write-com
  * titles and descriptions come back framed as data like everything else.
  */
 
+/** jinbe's own limit (sites/openapi/limits.ts LIMITS.bytes: 5 MiB); MCP_BODY_LIMIT_BYTES leaves room for the envelope. */
+const MAX_SPEC_CHARS = 5 * 1024 * 1024
 /**
- * Content through MCP is bounded far tighter than jinbe's 5 MB: the whole JSON-RPC request must fit
- * MCP_BODY_LIMIT_BYTES (256 KiB by default), escaping included. Larger specs: the console upload.
+ * Past this, the edge WAF in front of the MCP host refuses the JSON body (128 KiB) before it reaches
+ * auth-mcp — the platform fix is pending. A refusal that does reach us says what to do instead.
  */
-const MAX_SPEC_CHARS = 200 * 1024
+export const EDGE_BODY_HINT_CHARS = 120 * 1024
+const BIG_SPEC_HINT = 'A spec this large may be refused on the way in (the platform currently limits request bodies to 128 KiB at its edge): use the console upload, or wait for the platform limit fix.'
 const paramName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/)
 const routeId = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/)
 const permission = z.string().max(128).regex(/^[a-z][a-z0-9_.-]*:[a-z*][a-z0-9_*-]*$/)
@@ -77,7 +80,7 @@ export const importOpenapi = defineTool({
   write: true,
   input: {
     name: siteName,
-    spec: z.string().min(1).max(MAX_SPEC_CHARS).optional().describe('The OpenAPI document (JSON or YAML, at most 200 KB), for the preview'),
+    spec: z.string().min(1).max(MAX_SPEC_CHARS).optional().describe('The OpenAPI document (JSON or YAML, at most 5 MiB; over about 120 KiB, use the console upload until the platform edge limit is raised), for the preview'),
     format: z.enum(['auto', 'json', 'yaml']).default('auto'),
     options,
     decisions: z.array(decision).max(2000).default([]),
@@ -95,10 +98,16 @@ export const importOpenapi = defineTool({
 
     if (!args.commit) {
       if (!args.spec) throw toolError('invalid_request', 'Pass the spec to preview, or commit with the specSha256 and baseEtag of a preview')
-      const res = await ctx.jinbe.write<Record<string, unknown>>(ctx.call, 'POST', `${base}/preview`, {
-        body: { source: { content: args.spec, format: args.format }, options: args.options, decisions: args.decisions },
-        idempotencyKey: args.idempotencyKey,
-      })
+      let res
+      try {
+        res = await ctx.jinbe.write<Record<string, unknown>>(ctx.call, 'POST', `${base}/preview`, {
+          body: { source: { content: args.spec, format: args.format }, options: args.options, decisions: args.decisions },
+          idempotencyKey: args.idempotencyKey,
+        })
+      } catch (err) {
+        if (err instanceof ToolError && args.spec.length > EDGE_BODY_HINT_CHARS) throw new ToolError({ ...err.body, hint: BIG_SPEC_HINT })
+        throw err
+      }
       const p = obj(res.body)
       const spec = obj(p.spec)
       const { attention, items } = splitRows((Array.isArray(p.rows) ? p.rows : []) as Row[])
@@ -117,6 +126,7 @@ export const importOpenapi = defineTool({
         },
         source: `jinbe:${base}/preview`,
         notes: [
+          ...(args.spec.length > EDGE_BODY_HINT_CHARS ? [BIG_SPEC_HINT] : []),
           'Preview only: nothing is in the draft yet. Show the rows under attention to the person; commit with decisions (confirm: true where needsConfirm) and the commit values above.',
         ],
       }

@@ -37,7 +37,8 @@ export const envSchema = z.object({
   // Origins a browser-based client may call from (DNS-rebinding defence). Empty = no Origin allowed;
   // native clients send none.
   MCP_ALLOWED_ORIGINS: list,
-  MCP_BODY_LIMIT_BYTES: int('262144'),
+  // jinbe takes OpenAPI specs up to 5 MiB; the JSON-RPC envelope and escaping need a margin on top.
+  MCP_BODY_LIMIT_BYTES: int(String(6 * 1024 * 1024)),
   MCP_RESPONSE_LIMIT_BYTES: int('65536'),
 
   // The authorization server (Hydra): issuer for PRM, public URL for personal-key exchange, admin URL

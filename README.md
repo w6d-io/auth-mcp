@@ -420,7 +420,10 @@ environment has switched off.
   people lists carry only id, email, name and state.
 - **Limits.** Each (user, client) pair gets a budget (60 reads and 10 writes per minute, in memory
   per replica). Responses are capped at 64 KB and flagged `truncated`. Request bodies are capped at
-  256 KB. A browser `Origin` must be on the allow-list.
+  6 MiB (`MCP_BODY_LIMIT_BYTES`: OpenAPI specs up to jinbe's 5 MiB; the platform edge currently stops
+  JSON bodies over 128 KiB before they arrive — use the console upload for larger specs until that is
+  raised). Draft writes carry the draft's etag as If-Match: a draft someone saved meanwhile is a
+  conflict, never overwritten. A browser `Origin` must be on the allow-list.
 - **Writes.** Direct: a key does what its holder can do, and jinbe's delegation gate refuses what a
   key never may (403 `delegation_ineligible:*` → tool error `never_via_mcp`). Protected actions need a
   key created with them allowed (422 `step_up_unavailable` → `protected_actions_off`); production

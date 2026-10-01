@@ -112,6 +112,9 @@ const UPSTREAM_CODES: Record<string, ToolErrorCode> = {
   already_verified: 'conflict',
   unknown_address: 'invalid_request',
   use_email_endpoint: 'invalid_request',
+  // Site drafts (jinbe wave21): a stale If-Match (412) or a missing one once required (428).
+  stale_draft: 'conflict',
+  precondition_required: 'conflict',
   // Onboarding (jinbe publish gate, verify).
   unconfirmed_findings: 'unconfirmed_findings',
   verify_rate_limited: 'rate_limited',
@@ -228,8 +231,15 @@ function upstreamDetails(body: unknown): unknown {
     'permission', 'missing', 'missingByScope', 'grantedBy', 'blockingGroup', 'targetGroups',
     // A second-factor refusal: {rule, requiredAal, maxAgeMin, requiredBecause, groups, keyReason}.
     'secondFactor',
+    // A stale draft: the etag now and when it was saved (who saved it is left out: an email).
+    'current',
   ]) {
     if (b[k] !== undefined) picked[k] = b[k]
+  }
+  if (picked.current && typeof picked.current === 'object') {
+    const current = { ...(picked.current as Record<string, unknown>) }
+    delete current.updatedBy
+    picked.current = current
   }
   return Object.keys(picked).length ? picked : undefined
 }
@@ -314,6 +324,13 @@ export function fromJinbe(status: number, body: unknown, retryAfter?: string | n
     message =
       (typeof keyReason === 'string' && KEY_REASON_MESSAGES[keyReason]) ||
       'This is a protected action and this connection may not do it now: create a new key with protected actions allowed, or (browser sign-in) sign in again and allow them'
+  }
+  if (upstream === 'stale_draft') {
+    const at = (body as { current?: { updatedAt?: unknown } } | null)?.current?.updatedAt
+    message = `Someone saved this draft${typeof at === 'string' ? ` at ${sanitizeString(at, 40)}` : ''} since you read it: read it again (get_site, then the draft tool) and retry; nothing was overwritten`
+  }
+  if (upstream === 'precondition_required') {
+    message = 'The platform requires the draft etag for this write: read the draft first and pass its etag (draftEtag); nothing was overwritten'
   }
   const bodyRetry = (body as { retryAfter?: unknown } | null)?.retryAfter
   const retryAfterSec =

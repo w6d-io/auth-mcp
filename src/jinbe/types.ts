@@ -50,7 +50,8 @@ export interface RiskFlag {
 /** A security finding of the preview (jinbe onboarding): confirm ones must be acknowledged at publish. */
 export interface SiteFinding {
   code: string
-  level: 'error' | 'warn' | 'confirm'
+  /** info (jinbe wave21: preserve_host_off, publish_removes_orgs) never blocks and needs no acknowledge. */
+  level: 'error' | 'warn' | 'confirm' | 'info'
   message: string
   fix: string
   path?: string

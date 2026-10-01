@@ -23,7 +23,12 @@ interface SiteDraft {
   baseVersion: number
   updatedAt?: string
   updatedBy?: string
+  /** jinbe wave21: the draft's etag (also the ETag header), sent back as If-Match on the next write. */
+  etag?: string
 }
+
+const DRAFT_ETAG = /^[A-Za-z0-9._-]{1,128}$/
+export const draftEtag = z.string().regex(DRAFT_ETAG).describe("The draft's etag from your last read (get_site, a draft tool's answer): the write is refused if someone saved the draft since")
 
 const WRITE_SCOPES = [P.SITES_WRITE]
 export const lintOf = (site: Record<string, unknown>) => {
@@ -50,34 +55,43 @@ export async function draftOf(ctx: ToolContext, name: string): Promise<SiteDraft
   }
 }
 
-/** What an edit starts from: the draft if there is one, else the saved intent. */
+/**
+ * What an edit starts from: the draft if there is one (with its etag: the write sends it as If-Match,
+ * so a draft saved by someone else in between is a 412, never overwritten), else the saved intent.
+ */
 export async function workingSite(ctx: ToolContext, name: string) {
   const [draft, saved] = await Promise.all([draftOf(ctx, name), savedSite(ctx, name)])
-  if (draft) return { site: obj(draft.site), from: 'draft' as const, baseVersion: draft.baseVersion, saved }
-  if (saved) return { site: obj(saved.site), from: 'saved' as const, baseVersion: saved.version, saved }
+  if (draft) return { site: obj(draft.site), from: 'draft' as const, baseVersion: draft.baseVersion, saved, etag: typeof draft.etag === 'string' ? draft.etag : undefined }
+  if (saved) return { site: obj(saved.site), from: 'saved' as const, baseVersion: saved.version, saved, etag: undefined }
   throw toolError('not_found', `No site or draft named ${name}: start one with create_site`)
 }
 
-export async function putDraft(ctx: ToolContext, name: string, site: Record<string, unknown>, baseVersion: number | undefined, key?: string) {
+/**
+ * Write the draft. `ifMatch`: the etag of the draft this edit started from — never a freshly read one
+ * (that would overwrite whatever someone saved in between). Absent: a new draft, or a caller who read
+ * none (jinbe accepts and logs it, or answers 428 once SITES_DRAFT_IF_MATCH=require).
+ */
+export async function putDraft(ctx: ToolContext, name: string, site: Record<string, unknown>, baseVersion: number | undefined, key?: string, ifMatch?: string) {
   if (site.name !== undefined && site.name !== name) throw toolError('invalid_request', `The draft names '${String(site.name)}', not '${name}'`)
   const res = await ctx.jinbe.write<SiteDraft>(ctx.call, 'PUT', `${SITES}/${seg(name)}/draft`, {
     body: { site, ...(baseVersion !== undefined ? { baseVersion } : {}) },
     idempotencyKey: key,
+    headers: ifMatch ? { 'if-match': `"${ifMatch}"` } : {},
   })
   const d = obj(res.body)
-  return { baseVersion: d.baseVersion ?? baseVersion ?? null, updatedAt: d.updatedAt ?? null }
+  return { baseVersion: d.baseVersion ?? baseVersion ?? null, updatedAt: d.updatedAt ?? null, etag: d.etag ?? null }
 }
 
 export const saveSiteDraft = defineTool({
   name: 'save_site_draft',
   title: 'Save a site draft',
   description:
-    'Save the server-side draft of a site (it may be incomplete), with a security lint of it. Changes nothing live: save_site_version, then publish_site, do that.',
+    "Save the server-side draft of a site (it may be incomplete), with a security lint of it. Pass draftEtag (from your last read) when a draft exists: if someone saved it since, the save is refused (conflict) instead of overwriting their work. Changes nothing live: save_site_version, then publish_site, do that.",
   scopes: WRITE_SCOPES,
   write: true,
-  input: { name: siteName, site: intent, baseVersion: z.number().int().min(0).optional(), idempotencyKey },
+  input: { name: siteName, site: intent, baseVersion: z.number().int().min(0).optional(), draftEtag: draftEtag.optional(), idempotencyKey },
   async run(args, ctx) {
-    const draft = await putDraft(ctx, args.name, args.site, args.baseVersion, args.idempotencyKey)
+    const draft = await putDraft(ctx, args.name, args.site, args.baseVersion, args.idempotencyKey, args.draftEtag)
     return { data: { name: args.name, draft, lint: lintOf(args.site) }, source: `jinbe:${SITES}/:name/draft`, notes: [nextStep('access')] }
   },
 })
@@ -220,7 +234,7 @@ export const updateSiteRoutes = defineTool({
     if (problems.length) throw toolError('invalid_request', `Nothing written: ${problems.slice(0, 20).join('; ')}`, { details: { problems } })
 
     const site = { ...base.site, routes: { ...routes, items, ...(args.catchAll ? { catchAll: args.catchAll } : {}) } }
-    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey)
+    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey, base.etag)
     return {
       data: {
         name: args.name,

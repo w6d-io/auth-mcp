@@ -43,7 +43,7 @@ export const setSiteGates = defineTool({
       else gates.push(g)
     }
     const site = { ...base.site, gates }
-    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey)
+    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey, base.etag)
     return {
       data: { name: args.name, gates: ids, draft, lint: lintOf(site), ...(args.expert_gate ? { expertGateReason: args.expert_gate.reason } : {}) },
       source: `jinbe:${SITES}/:name/draft`,
@@ -79,7 +79,7 @@ export const setSiteAccess = defineTool({
       const login = obj(site.login)
       site.login = { reach: 'granted', ...login, twoFactor: { clients: 'exempt', ...obj(login.twoFactor), scope: args.twoFactor } }
     }
-    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey)
+    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey, base.etag)
     return {
       data: { name: args.name, roles: site.roles, groups: obj(site.groups).platform ?? {}, twoFactor: obj(obj(site.login).twoFactor).scope ?? 'none', draft, lint: lintOf(site) },
       source: `jinbe:${SITES}/:name/draft`,
