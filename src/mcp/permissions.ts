@@ -42,19 +42,21 @@ export const PROTECTED: ReadonlySet<string> = new Set<string>(PROTECTED_PERMISSI
 export const CATALOG_PERMISSIONS: ReadonlySet<string> = new Set([
   'users:read', 'users:create', 'users:update', 'users:update_email', 'users.metadata:write', 'users:disable', 'users:delete',
   'users:recovery', 'users:verify', 'users:send_login_link', 'users:reset_second_factor', 'sessions:read', 'sessions:revoke',
-  'access:read', 'access:check', 'groups:read', 'groups:write', 'groups.members:write', 'groups.members:revoke', 'groups.mfa:write',
-  'org:read', 'org:write', 'org:delete', 'org.members:read', 'org.members:write', 'org.admins:write', 'org.keys:read',
-  'org.keys:write', 'org.keys:revoke', 'sites:read', 'sites:write', 'sites:apply', 'sites:delete', 'sites.requests:approve',
-  'zones:read', 'zones:write', 'zones:delete', 'gateway:read', 'gateway:apply', 'settings:read', 'settings.signin:write',
-  'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:read', 'audit:export', 'recert:read',
-  'recert:manage', 'recert:delete', 'stats:read',
+  'access:read', 'access:check', 'groups:read', 'groups:write', 'groups.members:write', 'groups.members:revoke',
+  'groups.mfa:write', 'users.grants:read', 'users.grants:write', 'orgs:read', 'orgs:write', 'orgs:delete', 'orgs.members:write',
+  'orgs.owners:write', 'org.members:read', 'org.members:write', 'org.keys:read', 'org.keys:write', 'org.keys:revoke',
+  'org.audit:read', 'sites:read', 'sites:write', 'sites:apply', 'sites:delete', 'sites.requests:approve', 'sites.signup:write',
+  'sites.signup:revoke', 'zones:read', 'zones:write', 'zones:delete', 'gateway:read', 'gateway:apply', 'settings:read',
+  'settings.signin:write', 'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:read', 'audit:export',
+  'recert:read', 'recert:manage', 'recert:delete', 'stats:read',
 ])
 
 /** Catalogue permissions a delegated token may never use (jinbe `delegable: 'never'`), kept in step by the same test. */
 export const CATALOG_NEVER: ReadonlySet<string> = new Set([
-  'users:delete', 'users:reset_second_factor', 'groups.members:revoke', 'groups.mfa:write', 'org:delete', 'org.admins:write', 'org.keys:write',
-  'sites:delete', 'sites.requests:approve', 'zones:write', 'zones:delete', 'gateway:apply', 'settings.signin:write',
-  'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:export', 'recert:manage', 'recert:delete',
+  'users:delete', 'users:reset_second_factor', 'groups.members:revoke', 'groups.mfa:write', 'users.grants:write', 'orgs:delete',
+  'orgs.owners:write', 'org.keys:write', 'sites:delete', 'sites.requests:approve', 'sites.signup:write', 'sites.signup:revoke',
+  'zones:write', 'zones:delete', 'gateway:apply', 'settings.signin:write', 'settings.mcp:write', 'policy.bundle:read',
+  'policy.bundle:write', 'audit:export', 'recert:manage', 'recert:delete',
 ])
 
 /**

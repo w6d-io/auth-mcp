@@ -33,6 +33,7 @@ export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   update_site_routes: ['base'],
   set_site_gates: ['base'],
   set_site_access: ['base'],
+  set_site_signup: ['base'],
   import_openapi: ['base'],
   save_site_version: ['base'],
   // Sites: what the gateway serves

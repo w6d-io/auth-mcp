@@ -37,10 +37,22 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Invite carol@example.com and add her to the group "support".', tools: ['invite_user', 'add_user_to_groups'] },
   { ask: 'Resend the verification email to the users who never verified, from this list.', tools: ['plan_bulk', 'execute_bulk', 'get_bulk_job'] },
   { ask: 'Create a group "billing_support" that gives the viewer role on billing.', tools: ['list_roles', 'create_group'] },
+  { ask: 'Let people sign up on the site "shop" with their own organization: what will they be able to do?', tools: ['set_site_signup', 'what_can_users_do', 'save_site_version', 'publish_site'] },
+  { ask: 'Who signed up through "shop"?', tools: ['list_signup_members'] },
 ]
 
 /** Step-by-step write recipes: the tools in order, and what to check between them. */
 export const RECIPES: ReadonlyArray<{ title: string; steps: string[]; tools: string[] }> = [
+  {
+    title: 'Open public sign-up on a site',
+    tools: ['set_site_signup', 'what_can_users_do', 'check_site_draft', 'save_site_version', 'publish_site', 'list_signup_members'],
+    steps: [
+      '**Settings:** `set_site_signup` — mode (closed, open, domains), the roles sign-ups get (`user` in the standard set; never admin through MCP), the organization (personal, domain, invite, none). People join once their email address is verified; existing accounts join with "Continue to <site>".',
+      '**Check what they reach:** `what_can_users_do`; change routes or roles in the draft until the person is happy.',
+      '**Save and publish:** `save_site_version`, then `publish_site`. Opening or widening sign-up needs sites.signup:write as well: the person confirms in a browser with their second factor.',
+      '**Follow:** `list_signup_members`. Removing people is done by a person in the console.',
+    ],
+  },
   {
     title: 'Onboard a site securely (the prompt onboard_site walks it)',
     tools: ['create_site', 'set_site_access', 'create_group', 'add_user_to_groups', 'check_site_draft', 'save_site_version', 'can_i', 'publish_site', 'verify_site'],
