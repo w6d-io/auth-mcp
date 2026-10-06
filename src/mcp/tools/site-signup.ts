@@ -127,4 +127,36 @@ export const listSignUpMembers = defineTool({
   },
 })
 
-export const siteSignUpTools: ToolDef[] = [setSiteSignUp, whatCanUsersDo, listSignUpMembers] as ToolDef[]
+export const listSiteMembers = defineTool({
+  name: 'list_site_members',
+  title: "Who uses a site (its own groups)",
+  description: "A site's own groups (<site>-…, the sign-up group included, as published), the roles each gives on the site, and who is in each.",
+  scopes: [P.SITES_MEMBERS_WRITE],
+  input: { name: siteName },
+  async run(args, ctx) {
+    const data = await ctx.jinbe.get<unknown>(ctx.call, `${SITES}/${seg(args.name)}/members`)
+    return { data, source: `jinbe:${SITES}/:name/members` }
+  },
+})
+
+export const addSiteMember = defineTool({
+  name: 'add_site_member',
+  title: "Add a person to one of a site's groups",
+  description:
+    "Give somebody who has an account one of a site's own groups (<site>-…, published), so they get its roles on that site. A group that requires two-step sign-in refuses a person without a second factor. To create a new site group, add it in the draft with set_site_access (groups: {\"<site>-editors\": [\"editor\"]}) and publish. Removing people is done by a person in the console.",
+  scopes: [P.SITES_MEMBERS_WRITE],
+  write: true,
+  input: {
+    name: siteName,
+    group: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+    email: z.string().trim().toLowerCase().email().max(254),
+    idempotencyKey,
+  },
+  async run(args, ctx) {
+    if (!args.group.startsWith(`${args.name}-`)) throw toolError('invalid_request', `Only ${args.name}'s own groups (${args.name}-…) are managed here`)
+    const res = await ctx.jinbe.write<unknown>(ctx.call, 'POST', `${SITES}/${seg(args.name)}/members`, { body: { group: args.group, email: args.email }, idempotencyKey: args.idempotencyKey })
+    return { data: res.body, source: `jinbe:${SITES}/:name/members` }
+  },
+})
+
+export const siteSignUpTools: ToolDef[] = [setSiteSignUp, whatCanUsersDo, listSignUpMembers, listSiteMembers, addSiteMember] as ToolDef[]

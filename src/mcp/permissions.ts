@@ -14,6 +14,8 @@ export const P = {
   SITES_WRITE: 'sites:write',
   /** Protected: works only with a key created with protected actions allowed. */
   SITES_APPLY: 'sites:apply',
+  /** People in a site's own groups (<site>-…). */
+  SITES_MEMBERS_WRITE: 'sites.members:write',
   GROUPS_READ: 'groups:read',
   /** Protected: create and edit groups and service roles (never delete). */
   GROUPS_WRITE: 'groups:write',
@@ -46,9 +48,9 @@ export const CATALOG_PERMISSIONS: ReadonlySet<string> = new Set([
   'groups.mfa:write', 'users.grants:read', 'users.grants:write', 'orgs:read', 'orgs:write', 'orgs:delete', 'orgs.members:write',
   'orgs.owners:write', 'org.members:read', 'org.members:write', 'org.keys:read', 'org.keys:write', 'org.keys:revoke',
   'org.audit:read', 'sites:read', 'sites:write', 'sites:apply', 'sites:delete', 'sites.requests:approve', 'sites.signup:write',
-  'sites.signup:revoke', 'zones:read', 'zones:write', 'zones:delete', 'gateway:read', 'gateway:apply', 'settings:read',
-  'settings.signin:write', 'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:read', 'audit:export',
-  'recert:read', 'recert:manage', 'recert:delete', 'stats:read',
+  'sites.signup:revoke', 'sites.members:write', 'zones:read', 'zones:write', 'zones:delete', 'gateway:read', 'gateway:apply',
+  'settings:read', 'settings.signin:write', 'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:read',
+  'audit:export', 'recert:read', 'recert:manage', 'recert:delete', 'stats:read',
 ])
 
 /** Catalogue permissions a delegated token may never use (jinbe `delegable: 'never'`), kept in step by the same test. */

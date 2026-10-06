@@ -39,6 +39,7 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Create a group "billing_support" that gives the viewer role on billing.', tools: ['list_roles', 'create_group'] },
   { ask: 'Let people sign up on the site "shop" with their own organization: what will they be able to do?', tools: ['set_site_signup', 'what_can_users_do', 'save_site_version', 'publish_site'] },
   { ask: 'Who signed up through "shop"?', tools: ['list_signup_members'] },
+  { ask: 'Give carol@example.com the editor role on "shop".', tools: ['list_site_members', 'set_site_access', 'publish_site', 'add_site_member'] },
 ]
 
 /** Step-by-step write recipes: the tools in order, and what to check between them. */
