@@ -50,4 +50,16 @@ describe('getting-started guide', () => {
     expect(md.indexOf('`set_site_organizations` with `serve`')).toBeLessThan(md.indexOf('`invite_to_org` with the address'))
     expect(md).toMatch(/\| `invite_to_org` \| [^|]+ \| org\.members:write \| write \| no \|/)
   })
+
+  it("steers a partner's program to an organization key on an org-aware site, never a hand-made client or a secret header", () => {
+    const md = gettingStarted(allTools, principal({ scopes: ['mcp', 'sites:write'] }), d)
+    expect(md).toContain("### Let a partner's program call a site (organization API key)")
+    expect(md).toContain('API keys → Create key → For: the organization')
+    expect(md).toContain('`earnings.external:read`, never `earnings:external:read`')
+    expect(md).toContain('no X-Api-Key in a draft')
+    expect(md).toContain('no required_scope on the authenticator')
+    expect(md.indexOf('`set_site_organizations` with `serve` = that id')).toBeLessThan(md.indexOf('`verify_site`.'))
+    expect(md).toContain('API keys → My keys')
+    expect(md).not.toContain('Connections & keys')
+  })
 })

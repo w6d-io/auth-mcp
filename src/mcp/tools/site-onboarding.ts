@@ -22,7 +22,7 @@ export const setSiteGates = defineTool({
   name: 'set_site_gates',
   title: 'Set site gates (draft)',
   description:
-    "Add or replace gates of a site's draft by id, each by preset: who (signed-in, signed-in-or-tokens, people-and-org-keys, tokens, machines, anyone, optional), pass (policy, everyone, nobody; a gate admitting tokens must use policy), gets (identity, nothing, enrich), fails (website, api, platform). Raw handlers only through expert_gate, with a reason; check_site_draft flags it.",
+    "Add or replace gates of a site's draft by id, each by preset: who (signed-in, signed-in-or-tokens, people-and-org-keys, tokens, machines, anyone, optional), pass (policy, everyone, nobody; a gate admitting tokens must use policy), gets (identity, nothing, enrich), fails (website, api, platform). A partner's program comes in with its organization's API key: turn organizations on (set_site_organizations, which adds the people-and-org-keys gate) rather than a machines gate with a required_scope or a secret header. Raw handlers only through expert_gate, with a reason; check_site_draft flags it.",
   scopes: [P.SITES_WRITE],
   write: true,
   input: {

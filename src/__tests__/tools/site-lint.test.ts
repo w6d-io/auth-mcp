@@ -50,6 +50,30 @@ describe('lintSite', () => {
     expect(summarize(lintSite(s)).high).toBeGreaterThanOrEqual(4)
   })
 
+  it('flags the old way of opening an API to a partner: two-colon permissions, a required_scope, a secret header', () => {
+    const s = base() as Record<string, any>
+    s.routes.items[0].access.permission = 'earnings:external:read'
+    s.gates.push({
+      id: 'partner', authorizer: 'policy', errors: 'api',
+      authenticators: [{ handler: 'oauth2_introspection', config: { required_scope: ['earnings:external:read'] } }],
+      mutators: [{ handler: 'header', config: { headers: { 'X-Api-Key': 'PLACEHOLDER', 'X-User-Id': '{{ print .Subject }}' } } }],
+    })
+    const found = lintSite(s)
+    expect(found.filter((f) => f.code === 'permission_name').map((f) => f.path)).toEqual(['routes.items[0].access.permission', 'gates[1].authenticators[0].config.required_scope'])
+    expect(found.find((f) => f.code === 'required_scope_on_gate')).toMatchObject({ level: 'medium' })
+    expect(found.filter((f) => f.code === 'secret_in_header')).toHaveLength(1)
+    expect(found.find((f) => f.code === 'secret_in_header')?.message).toContain("'X-Api-Key'")
+  })
+
+  it('a one-colon permission with a dotted resource, a templated header and a wildcard verb are not flagged as names', () => {
+    const s = base() as Record<string, any>
+    s.routes.items[0].access.permission = 'earnings.external:read'
+    s.routes.catchAll.access = { kind: 'permission', permission: 'payroll:*' }
+    s.gates[0].mutators = [{ handler: 'header', config: { headers: { 'X-Session-Token': '{{ print .Extra.token }}' } } }]
+    expect(codes(s)).not.toContain('permission_name')
+    expect(codes(s)).not.toContain('secret_in_header')
+  })
+
   it('never throws on a half-written or hostile draft', () => {
     for (const draft of [null, 'x', [], { routes: 'x' }, { gates: [null, 1, 'a'] }, { routes: { items: [null, { methods: 'POST' }] } }]) {
       expect(() => lintSite(draft)).not.toThrow()

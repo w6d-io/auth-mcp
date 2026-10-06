@@ -43,6 +43,7 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Give carol@example.com the editor role on "shop".', tools: ['list_site_members', 'set_site_access', 'publish_site', 'add_site_member'] },
   { ask: 'Make my site "shop" org-aware, and invite dave@example.com as a member of my organisation there.', tools: ['set_site_organizations', 'save_site_version', 'publish_site', 'get_org', 'invite_to_org'] },
   { ask: 'Who has been invited into my organisation and not joined yet?', tools: ['list_orgs', 'list_org_invitations'] },
+  { ask: 'Let the partner Munia call GET /api/v1/earnings/days on "earning-service" from its own program.', tools: ['list_orgs', 'set_site_organizations', 'update_site_routes', 'check_site_draft', 'save_site_version', 'publish_site', 'verify_site'] },
 ]
 
 /** Step-by-step write recipes: the tools in order, and what to check between them. */
@@ -66,6 +67,19 @@ export const RECIPES: ReadonlyArray<{ title: string; steps: string[]; tools: str
       '**Check, save, publish:** `check_site_draft` (a gate admitting API tokens must let the policy decide: tokens_need_policy), `save_site_version`, `publish_site`.',
       '**Give roles through invitations:** `get_org` lists the org roles you may assign (`<site>:member`, `<site>:admin`); `invite_to_org` with the address and roles. They join by accepting from their account page (/account lists pending invitations once they sign in with that address, verified); no link or token goes through MCP. `list_org_invitations` shows who has not yet.',
       'Removing members, taking roles away, revoking invitations, creating organization API keys and turning organizations off are done by a person in the console.',
+    ],
+  },
+  {
+    title: "Let a partner's program call a site (organization API key)",
+    tools: ['list_orgs', 'set_site_organizations', 'update_site_routes', 'check_site_draft', 'save_site_version', 'publish_site', 'verify_site'],
+    steps: [
+      '**The model:** a partner (a company, another team\'s service) is an organization; its program calls with an **organization API key** (OAuth2 client credentials) valid on every site serving that organization. Never a hand-made OAuth2/Hydra client, never a secret header the gateway adds (no X-Api-Key in a draft: check_site_draft flags secret_in_header), never a secret asked or pasted in the chat.',
+      '**The organization:** `list_orgs` for its id (a missing one is created by staff in the console, owner by email).',
+      '**The site:** `set_site_organizations` with `serve` = that id. Its organization gate admits the organization\'s people (session) and its keys (tokens), and the policy decides: no required_scope on the authenticator (flagged required_scope_on_gate). People and programs calling the same routes share this one gate and one site.',
+      '**Routes:** each asks a permission named with exactly ONE colon, `resource[.sub]:verb` (`earnings.external:read`, never `earnings:external:read`: flagged permission_name). Data of one organization goes under `/orgs/:orgId/…` with `orgParam: orgId`, so a key of another organization is refused there. The service receives X-Org-Id, X-Client-Id and X-User-* from the gateway; copies sent by the caller are blanked.',
+      '**Paths:** `upstream.stripPath` and `upstream.path` apply to the whole site. Prefer route paths that match the service\'s own paths; a second site only when two gates truly need two different service prefixes.',
+      '**Check, save, publish, verify:** `check_site_draft` (fix high findings), `save_site_version`, `publish_site` (the person confirms with their second factor), `verify_site`.',
+      '**The key itself:** made by platform staff in the console, API keys → Create key → For: the organization → scopes (a permission such as `earnings.external:read`, a site role or a group). The secret is shown once to that person and handed to the partner by them; no key is ever created or read through MCP. Then test: no token 401, a key without the permission 403, the right key 200.',
     ],
   },
   {
@@ -212,7 +226,7 @@ export function gettingStarted(tools: readonly ToolDef[], principal: Authenticat
     '',
     'The sign-in lasts up to 30 days and refreshes on its own; `/mcp` → Re-authenticate signs in again (to get protected actions back after 12 hours, or permissions you gained since).',
     '',
-    '**A personal key (CI, headless, clients without browser sign-in):** create it under Connections & keys (shown once, 30 days at most) and keep it in an environment variable, never in a file you commit. A header in the configuration turns browser sign-in off for that server.',
+    '**A personal key (CI, headless, clients without browser sign-in):** create it under API keys → My keys (shown once, 30 days at most) and keep it in an environment variable, never in a file you commit. A header in the configuration turns browser sign-in off for that server.',
     '',
     '```sh',
     "export example_MCP_KEY='stk_mcp_<your key>'",
@@ -220,7 +234,7 @@ export function gettingStarted(tools: readonly ToolDef[], principal: Authenticat
     '  --header "Authorization: Bearer $example_MCP_KEY"',
     '```',
     '',
-    'Claude Desktop (through `mcp-remote`), Cursor, VS Code and curl: see Connections & keys in the console, or the auth-mcp README.',
+    'Claude Desktop (through `mcp-remote`), Cursor, VS Code and curl: see Connections in the console, or the auth-mcp README.',
     '',
     '## Tools',
     '',
