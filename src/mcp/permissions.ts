@@ -30,6 +30,8 @@ export const P = {
   USERS_VERIFY: 'users:verify',
   /** Protected. */
   USERS_UPDATE_EMAIL: 'users:update_email',
+  /** The platform view of every organisation (owners, entitled sites). */
+  ORGS_READ: 'orgs:read',
   ORG_MEMBERS_READ: 'org.members:read',
   AUDIT_READ: 'audit:read',
 } as const

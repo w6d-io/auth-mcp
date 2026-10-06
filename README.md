@@ -253,7 +253,7 @@ prompt `getting-started`: each tool is marked as available or not for *your* key
 | `get_my_identity` | Who this connection acts as, its effective scopes, read-only state, whether it may do protected actions (and until when), key, token expiry | any connection |
 | `can_i` | Would this connection be allowed to run a tool (with these arguments), and the refusal it would get; no side effect | any connection |
 | `get_my_permissions` | Your groups, roles and permissions as the policy engine resolves them | any connection |
-| `list_orgs` | The organisations you administer (ids for the org tools) | any connection |
+| `list_orgs` | The organisations you belong to and your org permissions in each (ids for the org tools) | any connection |
 | `list_sites` | Sites with status (draft, live, attention, paused), host, versions | `sites:read` |
 | `get_site` | One site's saved intent, version, etag and applied state | `sites:read` |
 | `site_versions` | A site's version history | `sites:read` |
@@ -271,9 +271,9 @@ prompt `getting-started`: each tool is marked as available or not for *your* key
 | `find_users` | Find people by id, email, or part of an email or name | `users:read` |
 | `search_audit` | Audit events you may read, filtered, newest first | `audit:read` |
 | `get_audit_event` | One audit event by id | `audit:read` |
-| `get_org` | One organisation and the groups you may grant in it | `org.members:read` |
+| `get_org` | One organisation: owners and sites (`orgs:read`), its org roles and which you may assign (`org.members:read` there) | `orgs:read` or `org.members:read` |
 | `list_org_users` | Members of one organisation | `org.members:read` |
-| `list_org_grants` | Groups handed out in one organisation, per member | `org.members:read` |
+| `list_org_member_roles` | The org roles each member holds; with `userId`, that member's direct grants there | `org.members:read` |
 | `create_site` | Start a new site as a draft from a template | `sites:write` |
 | `save_site_draft` | Save a site's draft, with a security lint | `sites:write` |
 | `update_site_routes` | Add, change or remove routes in the draft, up to 500 per call | `sites:write` |

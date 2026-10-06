@@ -45,7 +45,7 @@ export function registerResources(server: McpServer, principal: AuthenticatedPri
   }
 
   if (isVisible(getOrg, principal, deps)) {
-    // No org is bound to the token: one resource per organisation the person administers, jinbe
+    // No org is bound to the token: one resource per organisation the person belongs to, jinbe
     // deciding on each read whether they may see it.
     const template = new ResourceTemplate('org://{id}', {
       list: async () => {

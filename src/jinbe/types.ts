@@ -119,10 +119,49 @@ export interface UserLookup {
   }>
 }
 
-/** GET /api/organizations/:org/users — Kratos identities. */
+/** GET /api/organizations/:org/users — Kratos identities, each with its org roles there ("app:role"). */
 export interface OrgUsers {
-  data: Array<{ id: string; state?: string; traits?: Record<string, unknown>; created_at?: string; updated_at?: string }>
+  data: Array<{ id: string; state?: string; traits?: Record<string, unknown>; roles?: string[]; created_at?: string; updated_at?: string }>
   total?: number
+}
+
+/** GET /api/admin/organizations/:id (orgs:read). Owners are identity ids holding jinbe:owner there. */
+export interface PlatformOrganization {
+  id: string
+  name?: string
+  tenant?: string
+  applications?: string[]
+  owners?: string[]
+  sites?: string[]
+}
+
+/** GET /api/organizations/:org/roles: the org's roles, and whether the caller may assign each (holding rule). */
+export interface OrgRoles {
+  roles: Array<{ role: string; permissions?: string[]; assignable?: boolean }>
+}
+
+/** GET /api/organizations/:org/users/:id/roles. */
+export interface OrgMemberRoles {
+  id: string
+  roles: string[]
+}
+
+/** GET /api/organizations/:org/users/:id/grants: one member's direct grants in that org. */
+export interface OrgMemberGrants {
+  id: string
+  email?: string | null
+  grants: Array<{
+    id?: string
+    scope?: string
+    app?: string
+    kind?: 'role' | 'permission'
+    name?: string
+    reason?: string
+    expiresAt?: string
+    grantedBy?: string
+    grantedAt?: string
+    active?: boolean
+  }>
 }
 
 /** GET /api/me/organizations. */
@@ -139,6 +178,9 @@ export interface MyPermissions {
   roles: string[]
   permissions: string[]
   actions?: Record<string, boolean>
+  /** Org permissions per org id, for the orgs where the caller holds at least one; paged (orgLimit, orgCursor). */
+  orgPermissions?: Record<string, string[]>
+  orgPermissionsPage?: { total?: number; next?: string }
   /** jinbe wave19: the caller's second-factor picture (requiredBecause, enrolled, currentAal, factorAgeMin, stepUpFresh, stepUpPermissions). */
   secondFactor?: SecondFactorPicture | null
 }
@@ -158,11 +200,6 @@ export interface SecondFactorPicture {
 export interface GroupDefinition {
   name: string
   services: Record<string, string[]>
-}
-
-/** GET /api/organizations/:org/assignable-groups. */
-export interface AssignableGroups {
-  groups: Array<{ name: string; roles?: Record<string, string[]> } & Record<string, unknown>>
 }
 
 /** GET /api/audit/events — audit/v1 lines. */
