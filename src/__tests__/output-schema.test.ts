@@ -28,7 +28,9 @@ const ARGS: Record<string, Record<string, unknown>> = {
   list_groups: {}, list_services: {}, list_roles: { service: 'billing' }, get_permission_catalog: { service: 'billing' },
   explain_access: { email: 'bob@example.com', method: 'GET', path: '/x' }, get_user_access: { userId: USER }, find_users: { query: 'bob' },
   search_audit: {}, get_audit_event: { eventId: EVENT }, explain_admin_access: { method: 'GET', path: '/api/admin/users' },
-  get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_member_roles: { org: ORG },
+  get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_member_roles: { org: ORG }, list_org_invitations: { org: ORG },
+  invite_to_org: { org: ORG, email: 'dave@example.com', roles: ['billing:member'] },
+  set_site_organizations: { name: 'billing', serve: [ORG] },
   create_site: { name: 'fresh', displayName: 'Fresh', host: 'fresh.example.com', upstream: { service: 'fresh', namespace: 'fresh', port: 80 } },
   save_site_draft: { name: 'billing', site: { name: 'billing' } },
   update_site_routes: { name: 'billing', add: [{ ...route, id: 'added' }] },
@@ -82,6 +84,8 @@ function happyJinbe(): typeof fetch {
     [/^GET \/api\/admin\/organizations\/[^/]+$/, { id: ORG, name: 'Acme', tenant: 'acme', applications: [], owners: [], sites: ['jinbe'] }],
     [/^GET \/api\/organizations\/[^/]+\/roles$/, { roles: [] }],
     [/^GET \/api\/organizations\/[^/]+\/users$/, { data: [] }],
+    [/^GET \/api\/organizations\/[^/]+\/invitations$/, { invitations: [] }],
+    [/^POST \/api\/organizations\/[^/]+\/invitations$/, { __status: 201, body: { invitation: { id: 'i1', org: ORG, email: 'dave@example.com', roles: ['billing:member'] }, token: 'secret-token-value', link: null } }],
     [/^GET \/api\/admin\/users\/lookup$/, { match: 'none', data: [] }],
     [/^GET \/api\/admin\/users\/[^/]+\/groups$/, { groups: [] }],
     [/^GET \/api\/audit\/events$/, { events: [], nextCursor: null, scope: null, range: { from: 't', to: 't' }, truncated: false }],
@@ -107,7 +111,7 @@ const failingJinbe = (async () =>
 
 const everything = principal({
   scopes: [
-    'mcp', 'sites:read', 'groups:read', 'access:read', 'access:check', 'users:read', 'audit:read', 'orgs:read', 'org.members:read', 'sites:write', 'sites:apply', 'users:create',
+    'mcp', 'sites:read', 'groups:read', 'access:read', 'access:check', 'users:read', 'audit:read', 'orgs:read', 'org.members:read', 'org.members:write', 'sites:write', 'sites:apply', 'users:create',
     'users:recovery', 'users:send_login_link', 'users:verify', 'users:update_email', 'groups.members:write', 'groups:write',
   ],
   kind: 'personal',

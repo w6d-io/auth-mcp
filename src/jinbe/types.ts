@@ -140,6 +140,31 @@ export interface OrgRoles {
   roles: Array<{ role: string; permissions?: string[]; assignable?: boolean }>
 }
 
+/** One pending invitation into an organisation (jinbe org-invitations: never its token). */
+export interface OrgInvitation {
+  id: string
+  org: string
+  email: string
+  roles?: string[]
+  invitedBy?: { id: string | null; email?: string }
+  byPlatform?: boolean
+  createdAt?: string
+  expiresAt?: string
+  organizationName?: string | null
+}
+
+/** GET /api/organizations/:org/invitations (org.members:read). */
+export interface OrgInvitations {
+  invitations: OrgInvitation[]
+}
+
+/** POST /api/organizations/:org/invitations (org.members:write): the token and link are returned once. */
+export interface OrgInvitationCreated {
+  invitation: OrgInvitation
+  token?: string
+  link?: string | null
+}
+
 /** GET /api/organizations/:org/users/:id/roles. */
 export interface OrgMemberRoles {
   id: string

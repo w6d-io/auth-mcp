@@ -3,7 +3,7 @@ import { identityTools } from './identity.js'
 import { makeCanI } from './can-i.js'
 import { siteTools } from './sites.js'
 import { iamTools } from './iam.js'
-import { orgTools } from './orgs.js'
+import { orgTools, orgWriteTools } from './orgs.js'
 import { accessTools } from './access.js'
 import { adminExplainTools } from './admin-explain.js'
 import { auditTools } from './audit.js'
@@ -26,7 +26,7 @@ export const readTools: ToolDef[] = [...identityTools, ...siteTools, ...iamTools
  * Write wave: direct writes, decided by jinbe (owner rules in write-common.ts). diff_site and
  * get_bulk_job read, but sit with the writes they serve.
  */
-export const writeTools: ToolDef[] = [...siteWriteTools, ...siteOnboardingTools, ...siteSignUpTools, ...siteLifecycleTools, ...siteImportTools, ...sitePublishTools, ...userWriteTools, ...groupWriteTools, ...bulkTools, ...stepUpTools]
+export const writeTools: ToolDef[] = [...siteWriteTools, ...siteOnboardingTools, ...siteSignUpTools, ...siteLifecycleTools, ...siteImportTools, ...sitePublishTools, ...userWriteTools, ...orgWriteTools, ...groupWriteTools, ...bulkTools, ...stepUpTools]
 
 /** Stubs, see drafts.ts. */
 export const stubTools: ToolDef[] = draftTools

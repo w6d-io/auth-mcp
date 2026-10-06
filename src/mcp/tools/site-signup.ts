@@ -62,7 +62,7 @@ export const setSiteSignUp = defineTool({
   name: 'set_site_signup',
   title: 'Set site sign-up (draft)',
   description:
-    "Public sign-up through a site, in its draft: who may create an account from its sign-in page (mode closed, open, or domains with a list), the site roles they get (the <site>-users group; `user` in the standard set), and the organization they land in (personal: their own; domain: the org that proved the email domain; invite: none until invited; none). People join once their address is verified. Publishing a version that opens or widens it needs sites.signup:write on top of the publish (a person, second factor in a browser); closing or narrowing does not.",
+    "Public sign-up through a site, in its draft: who may create an account from its sign-in page (mode closed, open, or domains with a list), the site roles they get (the <site>-users group; `user` in the standard set), and the organization they land in (personal: their own; domain: the org that proved the email domain; invite: none until invited; none, the default while the site has organizations off: the others need set_site_organizations first). People join once their address is verified. Publishing a version that opens or widens it needs sites.signup:write on top of the publish (a person, second factor in a browser); closing or narrowing does not.",
   scopes: [P.SITES_WRITE],
   write: true,
   input: {
@@ -82,7 +82,8 @@ export const setSiteSignUp = defineTool({
       mode: args.mode ?? current.mode ?? 'closed',
       domains: args.domains ?? current.domains ?? [],
       roles: args.roles ?? current.roles ?? (roles.user ? ['user'] : roles.viewer ? ['viewer'] : []),
-      orgs: args.orgs ?? current.orgs ?? 'personal',
+      // An organization to land in needs organizations on (jinbe refuses organizations_off): none without.
+      orgs: args.orgs ?? current.orgs ?? (obj(base.site.organizations).enabled === true ? 'personal' : 'none'),
     }
     const unknown = signUp.roles.filter((r) => !roles[r])
     if (unknown.length) throw toolError('invalid_request', `The site defines no role ${unknown.join(', ')} (it has ${Object.keys(roles).join(', ') || 'none'})`)

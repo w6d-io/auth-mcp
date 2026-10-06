@@ -16,6 +16,8 @@ const SESSION_TOKEN: Handler = {
 export const WHO = {
   'signed-in': [{ handler: 'cookie_session' }],
   'signed-in-or-tokens': [{ handler: 'cookie_session' }, SESSION_TOKEN, { handler: 'oauth2_introspection' }],
+  // Organizations: the org's people (session) and its API keys (OAuth2 client credentials).
+  'people-and-org-keys': [{ handler: 'cookie_session' }, { handler: 'oauth2_introspection' }],
   tokens: [{ handler: 'oauth2_introspection' }, SESSION_TOKEN],
   machines: [{ handler: 'oauth2_introspection' }],
   anyone: [{ handler: 'noop' }],
@@ -40,6 +42,19 @@ export type WhoPreset = keyof typeof WHO
 export type PassPreset = keyof typeof PASS
 export type GetsPreset = keyof typeof GETS
 
+/**
+ * Whether handlers admit OAuth2 tokens (an organization's API key among them). Such a gate must let the
+ * policy decide: only the policy checks that a key's organization is served by the site, so jinbe
+ * refuses (tokens_need_policy) any other authorizer but deny.
+ */
+export const admitsTokens = (authenticators: unknown): boolean =>
+  Array.isArray(authenticators) && authenticators.some((a) => !!a && typeof a === 'object' && (a as Handler).handler === 'oauth2_introspection')
+
+export const tokensWithoutPolicy = (authenticators: unknown, authorizer: unknown): boolean =>
+  admitsTokens(authenticators) && authorizer !== 'policy' && !(authorizer && typeof authorizer === 'object' && (authorizer as Handler).handler === 'deny')
+
+const TOKENS_NEED_POLICY = "A gate that admits API tokens must let the policy decide (pass: policy, or nobody): otherwise any organization's key gets in, and the platform refuses it (tokens_need_policy)"
+
 const gateId = z.string().regex(/^[a-z]([a-z0-9-]{0,20}[a-z0-9])?$/, 'lowercase letters, digits and dashes, at most 22 characters')
 const method = z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 
@@ -56,6 +71,7 @@ export const presetGate = z
     preflight: z.boolean().optional(),
   })
   .strict()
+  .refine((g) => !tokensWithoutPolicy(WHO[g.who], PASS[g.pass ?? 'policy']), { message: TOKENS_NEED_POLICY, path: ['pass'] })
 
 const handler = z.object({ handler: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/), config: z.record(z.unknown()).optional() }).strict()
 
@@ -73,6 +89,7 @@ export const expertGate = z
     reason: z.string().min(3).max(280).describe('Why no preset fits: echoed in the answer for the person to review (not stored)'),
   })
   .strict()
+  .refine((g) => !tokensWithoutPolicy(g.authenticators, g.authorizer), { message: TOKENS_NEED_POLICY, path: ['authorizer'] })
 
 export type PresetGate = z.infer<typeof presetGate>
 
@@ -95,6 +112,14 @@ export function buildGate(g: PresetGate): Record<string, unknown> {
     ...(g.preflight !== undefined ? { preflight: g.preflight } : {}),
   }
 }
+
+/**
+ * The gate of a site with organizations on, identical to jinbe sites/presets.ts ORG_GATE: the org's
+ * people and its API keys come in, the policy decides (a person only in the route's own org, a key only
+ * for its own org), the service gets the identity, refusals answer as an API.
+ */
+export const ORG_GATE_ID = 'organization'
+export const ORG_GATE = buildGate({ id: ORG_GATE_ID, label: 'Organization members and API keys', who: 'people-and-org-keys', pass: 'policy', gets: 'identity', fails: 'api' })
 
 /** An expert gate as stored (its reason is not part of the intent). */
 export function buildExpertGate(g: z.infer<typeof expertGate>): Record<string, unknown> {

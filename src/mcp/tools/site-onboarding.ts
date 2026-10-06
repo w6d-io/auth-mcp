@@ -6,7 +6,8 @@ import { toolError } from '../../safety/errors.js'
 import { buildExpertGate, buildGate, expertGate, presetGate } from '../gate-presets.js'
 import { nextStep } from '../onboarding.js'
 import { SITES, idempotencyKey, obj, siteName } from './write-common.js'
-import { lintOf, putDraft, workingSite } from './site-writes.js'
+import { ORGS_NOTE, lintOf, putDraft, workingSite } from './site-writes.js'
+import { withOrganizations } from '../site-templates.js'
 
 /**
  * Onboarding tools that edit the draft (gates, access) and verify a published site. Gates are given by
@@ -21,7 +22,7 @@ export const setSiteGates = defineTool({
   name: 'set_site_gates',
   title: 'Set site gates (draft)',
   description:
-    "Add or replace gates of a site's draft by id, each by preset: who (signed-in, signed-in-or-tokens, tokens, machines, anyone, optional), pass (policy, everyone, nobody), gets (identity, nothing, enrich), fails (website, api, platform). Raw handlers only through expert_gate, with a reason; check_site_draft flags it.",
+    "Add or replace gates of a site's draft by id, each by preset: who (signed-in, signed-in-or-tokens, people-and-org-keys, tokens, machines, anyone, optional), pass (policy, everyone, nobody; a gate admitting tokens must use policy), gets (identity, nothing, enrich), fails (website, api, platform). Raw handlers only through expert_gate, with a reason; check_site_draft flags it.",
   scopes: [P.SITES_WRITE],
   write: true,
   input: {
@@ -88,6 +89,41 @@ export const setSiteAccess = defineTool({
   },
 })
 
+export const setSiteOrganizations = defineTool({
+  name: 'set_site_organizations',
+  title: 'Turn organizations on for a site (draft)',
+  description:
+    "Turn organizations on in a site's draft, so many people share the same objects of its backend per organization: adds the organization gate (organization members and their organization's API keys, the policy decides), a route /orgs/:orgId/:any* on it asking <site>:use, the org roles <site>-admin (site role admin, held by owners) and <site>-member (site role user), and the organizations the site serves (serve, added to the ones it has). Adds only: what the draft already has stays. Turning organizations off or removing a served organization is done in the console.",
+  scopes: [P.SITES_WRITE],
+  write: true,
+  input: {
+    name: siteName,
+    serve: z.array(z.string().uuid()).max(100).default([]).describe('Organization ids (list_orgs) the site serves: added to its orgs'),
+    idempotencyKey,
+  },
+  async run(args, ctx) {
+    const base = await workingSite(ctx, args.name)
+    const { site, added, kept, problems } = withOrganizations({ ...base.site, name: base.site.name ?? args.name })
+    const orgs = Array.isArray(site.orgs) ? site.orgs.map(String) : []
+    const served = args.serve.filter((o) => !orgs.includes(o))
+    const nextOrgs = [...orgs, ...served]
+    site.orgs = nextOrgs
+    if (served.length) added.push(`served organizations ${served.join(', ')}`)
+    if (!added.length) throw toolError('invalid_request', 'Nothing to change: organizations are already on with the template, and those organizations already served')
+    const draft = await putDraft(ctx, args.name, site, base.baseVersion, args.idempotencyKey, base.etag)
+    return {
+      data: { name: args.name, from: base.from, added, kept, problems, organizations: site.organizations, orgs: nextOrgs, draft, lint: lintOf(site) },
+      source: `jinbe:${SITES}/:name/draft`,
+      notes: [
+        ORGS_NOTE,
+        ...(problems.length ? ['problems lists what the platform would refuse at preview: fix it in the draft before saving.'] : []),
+        ...(nextOrgs.length ? [] : ['The site serves no organization yet: pass serve with organization ids (list_orgs).']),
+        nextStep('access'),
+      ],
+    }
+  },
+})
+
 /** jinbe caps the probes at a 25 s budget; with TLS, OPA, WAF, DNS and Kubernetes, about 45 s at worst. */
 const VERIFY_TIMEOUT_MS = 60_000
 
@@ -129,4 +165,4 @@ export const verifySite = defineTool({
   },
 })
 
-export const siteOnboardingTools: ToolDef[] = [setSiteGates, setSiteAccess, verifySite] as ToolDef[]
+export const siteOnboardingTools: ToolDef[] = [setSiteGates, setSiteAccess, setSiteOrganizations, verifySite] as ToolDef[]

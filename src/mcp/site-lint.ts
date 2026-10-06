@@ -2,11 +2,13 @@
  * Static lint of a Site intent (jinbe sites/schemas.ts), run locally before — and in addition to —
  * jinbe's preview. jinbe's preview answers "is it valid and does it collide" (gatekit compile,
  * overlaps, ties, zones); this answers "is it a secure choice", so the secure config is the easy path:
- * public writes, a public catch-all, no 2FA on privileged writes, allow-all handlers, open CORS.
+ * public writes, a public catch-all, no 2FA on privileged writes, allow-all handlers, open CORS. It
+ * also says early what jinbe's render would refuse anyway: a gate admitting API tokens without the
+ * policy (tokens_need_policy), org features while organizations are off (organizations_off).
  *
  * It reads the intent defensively (a draft can be half-written) and never throws on shape.
  */
-import { isExpertGate } from './gate-presets.js'
+import { isExpertGate, tokensWithoutPolicy } from './gate-presets.js'
 
 export type LintLevel = 'high' | 'medium' | 'low'
 
@@ -82,6 +84,9 @@ export function lintSite(intent: unknown): LintFinding[] {
 
   arr(intent.gates).forEach((g, i) => {
     if (!isObj(g)) return
+    if (tokensWithoutPolicy(g.authenticators, g.authorizer)) {
+      add('tokens_need_policy', 'high', "The gate admits API tokens but lets them pass without the policy: any organization's key would get in, and the platform refuses it. Set pass to policy", `gates[${i}].authorizer`)
+    }
     const authenticators = arr(g.authenticators).map(handlerName)
     if (authenticators.includes('noop')) add('noop_authenticator', 'high', 'The noop authenticator lets every request through unauthenticated', `gates[${i}].authenticators`)
     if (authenticators.includes('anonymous')) add('anonymous_authenticator', 'medium', 'The anonymous authenticator admits callers without credentials', `gates[${i}].authenticators`)
@@ -90,6 +95,19 @@ export function lintSite(intent: unknown): LintFinding[] {
     else if (isExpertGate(g)) add('expert_gate_used', 'medium', 'A hand-built gate (not a who/pass/gets/fails preset): review its handlers by hand', `gates[${i}]`)
     if (hasOpenCors([g.authenticators, g.authorizer, g.mutators, g.errors])) add('open_cors', 'medium', 'CORS allows any origin', `gates[${i}]`)
   })
+
+  const organizations = isObj(intent.organizations) ? intent.organizations : {}
+  if (organizations.enabled !== true) {
+    const groups = isObj(intent.groups) ? intent.groups : {}
+    const uses = [
+      items.some((r) => isObj(r) && !!r.orgParam) && 'routes scoped to an organization (orgParam)',
+      isObj(groups.orgGrantable) && Object.keys(groups.orgGrantable).length > 0 && 'org roles (groups.orgGrantable)',
+      isObj(intent.everyOrg) && Object.keys(intent.everyOrg).length > 0 && 'everyOrg',
+      arr(intent.orgs).length > 0 && 'served organizations (orgs)',
+      isObj(intent.signUp) && intent.signUp.orgs !== undefined && intent.signUp.orgs !== 'none' && 'sign-up into an organization (signUp.orgs)',
+    ].filter((x): x is string => !!x)
+    if (uses.length) add('organizations_off', 'high', `Organizations are off but the site uses ${uses.join(', ')}: the platform refuses it. Turn them on (set_site_organizations)`, 'organizations')
+  }
 
   const roles = intent.roles
   if (isObj(roles) && Object.values(roles).some((perms) => arr(perms).includes('*'))) {

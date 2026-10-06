@@ -33,6 +33,8 @@ export const P = {
   /** The platform view of every organisation (owners, entitled sites). */
   ORGS_READ: 'orgs:read',
   ORG_MEMBERS_READ: 'org.members:read',
+  /** Invite people into one organisation (and assign their org roles there): delegable. Never removes. */
+  ORG_MEMBERS_WRITE: 'org.members:write',
   AUDIT_READ: 'audit:read',
 } as const
 
@@ -48,7 +50,7 @@ export const CATALOG_PERMISSIONS: ReadonlySet<string> = new Set([
   'users:recovery', 'users:verify', 'users:send_login_link', 'users:reset_second_factor', 'sessions:read', 'sessions:revoke',
   'access:read', 'access:check', 'groups:read', 'groups:write', 'groups.members:write', 'groups.members:revoke',
   'groups.mfa:write', 'users.grants:read', 'users.grants:write', 'orgs:read', 'orgs:write', 'orgs:delete', 'orgs.members:write',
-  'orgs.owners:write', 'org.members:read', 'org.members:write', 'org.keys:read', 'org.keys:write', 'org.keys:revoke',
+  'orgs.owners:write', 'orgs.keys:write', 'org.members:read', 'org.members:write', 'org.keys:read', 'org.keys:write', 'org.keys:revoke',
   'org.audit:read', 'sites:read', 'sites:write', 'sites:apply', 'sites:delete', 'sites.requests:approve', 'sites.signup:write',
   'sites.signup:revoke', 'sites.members:write', 'zones:read', 'zones:write', 'zones:delete', 'gateway:read', 'gateway:apply',
   'settings:read', 'settings.signin:write', 'settings.mcp:write', 'policy.bundle:read', 'policy.bundle:write', 'audit:read',
@@ -58,7 +60,7 @@ export const CATALOG_PERMISSIONS: ReadonlySet<string> = new Set([
 /** Catalogue permissions a delegated token may never use (jinbe `delegable: 'never'`), kept in step by the same test. */
 export const CATALOG_NEVER: ReadonlySet<string> = new Set([
   'users:delete', 'users:reset_second_factor', 'groups.members:revoke', 'groups.mfa:write', 'users.grants:write', 'orgs:delete',
-  'orgs.owners:write', 'org.keys:write', 'sites:delete', 'sites.requests:approve', 'sites.signup:write', 'sites.signup:revoke',
+  'orgs.owners:write', 'orgs.keys:write', 'org.keys:write', 'sites:delete', 'sites.requests:approve', 'sites.signup:write', 'sites.signup:revoke',
   'zones:write', 'zones:delete', 'gateway:apply', 'settings.signin:write', 'settings.mcp:write', 'policy.bundle:read',
   'policy.bundle:write', 'audit:export', 'recert:manage', 'recert:delete',
 ])

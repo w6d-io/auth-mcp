@@ -38,7 +38,7 @@ describe('getting-started guide', () => {
 
   it('has the write recipes, each naming tools in order, and marks protected writes', () => {
     const md = gettingStarted(allTools, principal({ scopes: ['mcp', 'sites:write'] }), d)
-    for (const title of ['New site from an OpenAPI document', 'Map routes in bulk', "Change a user's email", 'Invite a user', 'Publish a site']) {
+    for (const title of ['New site from an OpenAPI document', 'Map routes in bulk', "Change a user's email", 'Invite a user', 'Publish a site', 'Make a site org-aware']) {
       expect(md).toContain(`### ${title}`)
     }
     expect(md.indexOf('`create_site`')).toBeLessThan(md.indexOf('`import_openapi` again with `commit`'))
@@ -47,5 +47,7 @@ describe('getting-started guide', () => {
     expect(md).toContain('tool error protected_actions_off')
     expect(md).toContain('tool error use_apply_request')
     expect(md).toContain('tool error never_via_mcp')
+    expect(md.indexOf('`set_site_organizations` with `serve`')).toBeLessThan(md.indexOf('`invite_to_org` with the address'))
+    expect(md).toMatch(/\| `invite_to_org` \| [^|]+ \| org\.members:write \| write \| no \|/)
   })
 })

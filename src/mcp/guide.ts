@@ -41,6 +41,8 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Let people sign up on the site "shop" with their own organization: what will they be able to do?', tools: ['set_site_signup', 'what_can_users_do', 'save_site_version', 'publish_site'] },
   { ask: 'Who signed up through "shop"?', tools: ['list_signup_members'] },
   { ask: 'Give carol@example.com the editor role on "shop".', tools: ['list_site_members', 'set_site_access', 'publish_site', 'add_site_member'] },
+  { ask: 'Make my site "shop" org-aware, and invite dave@example.com as a member of my organisation there.', tools: ['set_site_organizations', 'save_site_version', 'publish_site', 'get_org', 'invite_to_org'] },
+  { ask: 'Who has been invited into my organisation and not joined yet?', tools: ['list_orgs', 'list_org_invitations'] },
 ]
 
 /** Step-by-step write recipes: the tools in order, and what to check between them. */
@@ -53,6 +55,17 @@ export const RECIPES: ReadonlyArray<{ title: string; steps: string[]; tools: str
       '**Check what they reach:** `what_can_users_do`; change routes or roles in the draft until the person is happy.',
       '**Save and publish:** `save_site_version`, then `publish_site`. Opening or widening sign-up needs sites.signup:write as well: the person confirms in a browser with their second factor.',
       '**Follow:** `list_signup_members`. Removing people is done by a person in the console.',
+    ],
+  },
+  {
+    title: 'Make a site org-aware',
+    tools: ['list_orgs', 'set_site_organizations', 'update_site_routes', 'check_site_draft', 'save_site_version', 'publish_site', 'get_org', 'invite_to_org', 'list_org_invitations'],
+    steps: [
+      '**Turn organizations on:** `set_site_organizations` with `serve` = the organization ids the site serves (`list_orgs`). It adds the organization gate (organization members and their organization\'s API keys; the policy decides), a route `/orgs/:orgId/:any*` asking `<site>:use`, and the org roles `<site>-admin` (owners hold it) and `<site>-member`. A new site: `create_site` with `organizations: true`.',
+      '**Routes under the organization:** put the service\'s routes under `/orgs/:orgId/…` on the `organization` gate with `orgParam: orgId` (`update_site_routes`). A person passes only with a role in that organization; an organization\'s key only for its own. The service receives X-Org-Id and X-Org-Roles.',
+      '**Check, save, publish:** `check_site_draft` (a gate admitting API tokens must let the policy decide: tokens_need_policy), `save_site_version`, `publish_site`.',
+      '**Give roles through invitations:** `get_org` lists the org roles you may assign (`<site>:member`, `<site>:admin`); `invite_to_org` with the address and roles. They join by accepting from their account page (/account lists pending invitations once they sign in with that address, verified); no link or token goes through MCP. `list_org_invitations` shows who has not yet.',
+      'Removing members, taking roles away, revoking invitations, creating organization API keys and turning organizations off are done by a person in the console.',
     ],
   },
   {
@@ -132,7 +145,8 @@ export const RECIPES: ReadonlyArray<{ title: string; steps: string[]; tools: str
 const NEVER = [
   'delete anything: sites, drafts, users, groups, memberships, organisations (revoking one of your own keys is the one exception)',
   'zones, the gateway configuration, sign-in settings or the AI assistant (MCP) settings',
-  'reset a second factor, create a key, approve or reject a request',
+  'reset a second factor, create a key (an organisation\'s API keys included), approve or reject a request',
+  'remove an organisation\'s members, take an org role away or revoke an invitation',
   'export the policy bundle or the audit trail, or change it wholesale',
   'change your own account or groups',
   'turn a group\'s "Members must use 2FA" switch on or off (a super admin, in the console)',

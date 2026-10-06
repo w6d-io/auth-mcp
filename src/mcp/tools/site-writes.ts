@@ -4,7 +4,7 @@ import { P } from '../permissions.js'
 import { seg } from '../../jinbe/client.js'
 import { toolError } from '../../safety/errors.js'
 import { lintSite, summarize } from '../site-lint.js'
-import { buildSite, TEMPLATE_IDS } from '../site-templates.js'
+import { buildSite, TEMPLATE_IDS, withOrganizations } from '../site-templates.js'
 import { buildExpertGate, buildGate, expertGate, presetGate } from '../gate-presets.js'
 import { accessChecklist, nextStep } from '../onboarding.js'
 import { hasScope } from '../../auth/scopes.js'
@@ -31,6 +31,11 @@ const DRAFT_ETAG = /^[A-Za-z0-9._-]{1,128}$/
 export const draftEtag = z.string().regex(DRAFT_ETAG).describe("The draft's etag from your last read (get_site, a draft tool's answer): the write is refused if someone saved the draft since")
 
 const WRITE_SCOPES = [P.SITES_WRITE]
+
+/** What to tell the person once organizations are on. */
+export const ORGS_NOTE =
+  "Organizations on: put the service's routes under /orgs/:orgId/… on the organization gate (orgParam orgId); a person passes only with a role in that organization, an organization's key only for its own. People get org roles through invite_to_org."
+
 export const lintOf = (site: Record<string, unknown>) => {
   const findings = lintSite(site)
   return { findings, summary: summarize(findings) }
@@ -100,7 +105,7 @@ export const createSite = defineTool({
   name: 'create_site',
   title: 'Create a site (draft)',
   description:
-    "Step 1 of onboarding: start a new site as a draft from a template (web-api, app, api, spa-api, public, empty): address, upstream Service, gates, a catch-all and standard roles. Gates may be replaced by preset (who, pass, gets, fails); raw handlers only through expert_gate. Returns the access checklist for step 2. Refused when the site or a draft already exists. Nothing is live until it is saved and published.",
+    "Step 1 of onboarding: start a new site as a draft from a template (web-api, app, api, spa-api, public, empty): address, upstream Service (optionally a base path), gates, a catch-all and standard roles; organizations: true also turns organizations on. Gates may be replaced by preset (who, pass, gets, fails); raw handlers only through expert_gate. Returns the access checklist for step 2. Refused when the site or a draft already exists. Nothing is live until it is saved and published.",
   scopes: WRITE_SCOPES,
   write: true,
   input: {
@@ -115,9 +120,19 @@ export const createSite = defineTool({
         namespace: z.string().regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/, 'a namespace'),
         port: z.number().int().min(1).max(65535),
         scheme: z.enum(['http', 'https']).optional(),
+        path: z
+          .string()
+          .max(256)
+          .regex(/^(\/[A-Za-z0-9._~@-]+)+$/, 'a literal absolute path like /api/external (no :params, no trailing slash)')
+          .optional()
+          .describe('A base path the Service serves under, prepended to every request: /x with path /api/external reaches /api/external/x'),
       })
       .strict()
       .describe('The in-cluster Service the site sends traffic to'),
+    organizations: z
+      .boolean()
+      .optional()
+      .describe('true: turn organizations on (as set_site_organizations): the organization gate, a route /orgs/:orgId/:any*, org roles <site>-admin and <site>-member'),
     gates: z.array(presetGate).max(20).optional().describe("Replace or add the template's gates, by id, as presets"),
     ephemeral: ephemeral.optional().describe('{ttl?}: make it an ephemeral site (paused, never deleted, when the TTL passes; 1 hour to 7 days, 24 h by default). The expiry starts at the first save: pass the same to save_site_version'),
     expert_gate: expertGate.optional().describe('One hand-built gate, only when no preset fits (flagged by check_site_draft)'),
@@ -128,8 +143,9 @@ export const createSite = defineTool({
     if (saved || draft) {
       throw toolError('conflict', `A site or draft named ${args.name} already exists: edit it (update_site_routes, save_site_draft) instead`)
     }
-    const site = buildSite(args.template, {
-      name: args.name, displayName: args.displayName, host: args.host, pathPrefix: args.pathPrefix, ...args.upstream,
+    const { path: upstreamPath, ...upstream } = args.upstream
+    let site = buildSite(args.template, {
+      name: args.name, displayName: args.displayName, host: args.host, pathPrefix: args.pathPrefix, ...upstream, upstreamPath,
     })
     const gates = (site.gates as Array<Record<string, unknown>>).slice()
     for (const g of [...(args.gates ?? []).map((x) => buildGate(x)), ...(args.expert_gate ? [buildExpertGate(args.expert_gate)] : [])]) {
@@ -138,6 +154,8 @@ export const createSite = defineTool({
       else gates.push(g)
     }
     site.gates = gates
+    const orgs = args.organizations ? withOrganizations(site) : null
+    if (orgs) site = orgs.site
     const out = await putDraft(ctx, args.name, site, 0, args.idempotencyKey)
     let existing: string[] | null = null
     if (hasScope(ctx.principal.scopes, P.GROUPS_READ)) {
@@ -155,11 +173,13 @@ export const createSite = defineTool({
         site,
         lint: lintOf(site),
         accessChecklist: accessChecklist(site, existing),
+        ...(orgs ? { organizations: { added: orgs.added, problems: orgs.problems } } : {}),
         ...(args.ephemeral ? { ephemeral: { requested: args.ephemeral, startsAt: 'first save (save_site_version with the same ephemeral)' } } : {}),
       },
       source: `jinbe:${SITES}/:name/draft`,
       notes: [
         'Draft only: nothing is live.',
+        ...(orgs ? [ORGS_NOTE] : []),
         ...(args.ephemeral ? [`Ephemeral: pass ephemeral ${JSON.stringify(args.ephemeral)} to save_site_version; the expiry counts from that save, and the site is paused (not deleted) when it passes.`] : []),
         nextStep('create'),
       ],

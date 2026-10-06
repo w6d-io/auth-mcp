@@ -33,6 +33,7 @@ export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   update_site_routes: ['base'],
   set_site_gates: ['base'],
   set_site_access: ['base'],
+  set_site_organizations: ['base'],
   set_site_signup: ['base'],
   add_site_member: ['base'],
   import_openapi: ['base'],
@@ -53,6 +54,8 @@ export const CAN_I_RULES: Readonly<Record<string, readonly CanIRule[]>> = {
   resend_verification_email: ['base'],
   change_user_email: ['base'],
   add_user_to_groups: ['base', 'target_2fa'],
+  // Organisations (invitations only: never a removal)
+  invite_to_org: ['base'],
   // Access model
   create_group: ['base'],
   update_group: ['base'],

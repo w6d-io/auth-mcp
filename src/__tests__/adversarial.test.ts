@@ -90,7 +90,7 @@ describe('#6 an organisation is named, never assumed', () => {
   // there. Here: only a uuid reaches jinbe's path — no traversal, no second segment.
   it('every org argument is a uuid, checked before jinbe is called', async () => {
     const withOrg = readTools.filter((t) => 'org' in t.input)
-    expect(withOrg.map((t) => t.name).sort()).toEqual(['get_org', 'list_org_member_roles', 'list_org_users', 'search_audit'])
+    expect(withOrg.map((t) => t.name).sort()).toEqual(['get_org', 'list_org_invitations', 'list_org_member_roles', 'list_org_users', 'search_audit'])
     for (const t of withOrg) {
       const jinbe = mockJinbe({})
       const r = await execute(t, { org: '../admin/rbac' } as never, principal(), deps(jinbe.fetchImpl))
@@ -121,6 +121,7 @@ describe('#8 output leak scan', () => {
       if (path.endsWith('/services')) return { body: { services: [obj] } }
       if (path === '/api/me/organizations') return { body: { organizations: [ORG], names: { [ORG]: leak } } }
       if (path === '/api/me/permissions') return { body: { groups: [leak], roles: [], permissions: [], actions: {} } }
+      if (path.endsWith('/invitations')) return { body: { invitations: [{ ...obj, id: 'i1', org: ORG, email: leak, roles: [leak], invitedBy: { id: 'u', email: leak }, token: 'plain-secret-value' }] } }
       if (path.endsWith('/users')) return { body: { data: [{ id: 'u', traits: { email: leak, name: leak } }] } }
       if (path.endsWith('/grants')) return { body: { id: 'u', email: leak, grants: [{ ...obj, app: leak, name: leak, reason: leak }] } }
       if (path.endsWith('/roles')) return { body: { id: 'u', roles: [{ role: leak, permissions: [leak], assignable: true }] } }
@@ -136,7 +137,7 @@ describe('#8 output leak scan', () => {
     render_template: { template: leak, kind: 'header', sample: { method: 'GET', url: 'https://a.example.com/' } },
     list_roles: { service: 'leaky' }, get_permission_catalog: { service: 'leaky' },
     explain_access: { email: 'a@b.test', method: 'GET', path: '/' }, get_user_access: { userId: 'u' },
-    find_users: { query: 'a' }, explain_admin_access: { method: 'GET', path: '/api/admin/users' }, get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_member_roles: { org: ORG }, get_audit_event: { eventId: '0b7f7c2e-6a6c-4a55-9d4e-2f5b8f7e9a10' },
+    find_users: { query: 'a' }, explain_admin_access: { method: 'GET', path: '/api/admin/users' }, get_org: { org: ORG }, list_org_users: { org: ORG }, list_org_member_roles: { org: ORG }, list_org_invitations: { org: ORG }, get_audit_event: { eventId: '0b7f7c2e-6a6c-4a55-9d4e-2f5b8f7e9a10' },
   }
 
   it.each(readTools.map((t) => [t.name, t] as const))('%s leaks nothing secret-shaped', async (_name, tool) => {

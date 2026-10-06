@@ -6,8 +6,9 @@ import { seg } from '../../jinbe/client.js'
 import { ToolError } from '../../safety/errors.js'
 import { paginate, MAX_LIMIT } from '../../safety/pagination.js'
 import type {
-  MyOrganizations, MyPermissions, OrgMemberGrants, OrgMemberRoles, OrgRoles, OrgUsers, PlatformOrganization,
+  MyOrganizations, MyPermissions, OrgInvitationCreated, OrgInvitations, OrgMemberGrants, OrgMemberRoles, OrgRoles, OrgUsers, PlatformOrganization,
 } from '../../jinbe/types.js'
+import { idempotencyKey, refuseSelfTarget } from './write-common.js'
 
 /**
  * Organisation tools. A token is NOT bound to an organisation (owner decision: a personal key inherits
@@ -16,7 +17,9 @@ import type {
  * uuid check here only stops a malformed path; it is not the enforcement.
  *
  * An org role is `<app>:<role>` (jinbe's owner, member_manager, key_manager, auditor, viewer; a site's
- * come from its intent), assigned per member per organisation. These tools only read.
+ * come from its intent), assigned per member per organisation. These tools read, and invite: never
+ * remove a member, take a role away, revoke an invitation or a key, or create a key (orgs.keys:write is
+ * never delegable) — a person does those in the console.
  */
 
 const orgPath = (org: string) => `/api/organizations/${seg(org)}`
@@ -181,4 +184,64 @@ export const listOrgMemberRoles = defineTool({
   },
 })
 
-export const orgTools: ToolDef[] = [listOrgs, getOrg, listOrgUsers, listOrgMemberRoles] as ToolDef[]
+/** An invitation as shown: who invited is reduced to whether it was the platform (minimal PII). */
+const invitationView = (i: OrgInvitations['invitations'][number]) => ({
+  id: i.id, email: i.email, roles: i.roles ?? [], byPlatform: i.byPlatform === true, createdAt: i.createdAt ?? null, expiresAt: i.expiresAt ?? null,
+})
+
+export const listOrgInvitations = defineTool({
+  name: 'list_org_invitations',
+  title: 'Pending invitations of an organisation',
+  description: 'The pending invitations into one organisation, newest first: address, the org roles given on acceptance, expiry. Never their tokens.',
+  scopes: [P.ORG_MEMBERS_READ],
+  input: { org, ...page },
+  async run(args, { jinbe, call }) {
+    const res = await jinbe.get<OrgInvitations>(call, `${orgPath(args.org)}/invitations`)
+    const p = paginate((res.invitations ?? []).map(invitationView), { limit: args.limit, cursor: args.cursor, query: `list_org_invitations:${args.org}` })
+    return { data: { items: p.items, total: p.total }, nextCursor: p.nextCursor, source: 'jinbe:/api/organizations/:org/invitations' }
+  },
+})
+
+// jinbe org-invitations.routes.ts ROLE: an org role `<app>:<role>`.
+const orgRole = z.string().max(81).regex(/^[a-z0-9][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$/, 'an org role like billing:member (see get_org)')
+
+export const inviteToOrg = defineTool({
+  name: 'invite_to_org',
+  title: 'Invite somebody into an organisation',
+  description:
+    "Invite a person into one organisation by email, with the org roles (`<app>:<role>`, see get_org: assignable ones only) they get on accepting. " +
+    'They join only by accepting, signed in with that address verified, from their account page (pending invitations). No link or token is ' +
+    'returned here. A pending invitation of the same address there is replaced. Removing members or revoking invitations is done in the console.',
+  scopes: [P.ORG_MEMBERS_WRITE],
+  write: true,
+  input: {
+    org,
+    email: z.string().trim().toLowerCase().email().max(254),
+    roles: z.array(orgRole).max(32).default([]).describe('Org roles given on acceptance; checked against what you may assign, now and again then'),
+    idempotencyKey,
+  },
+  guard(args, ctx) {
+    refuseSelfTarget(args.email, ctx)
+  },
+  async run(args, ctx) {
+    const res = await ctx.jinbe.write<OrgInvitationCreated>(ctx.call, 'POST', `${orgPath(args.org)}/invitations`, {
+      body: { email: args.email, ...(args.roles.length ? { roles: args.roles } : {}) },
+      idempotencyKey: args.idempotencyKey,
+    })
+    const body = res.body ?? ({} as OrgInvitationCreated)
+    // Neither the token nor the link (it carries the token) goes through the model.
+    return {
+      data: { invitation: body.invitation ? invitationView(body.invitation) : null },
+      notes: [
+        'The person accepts from their account page (/account lists pending invitations once they sign in with the invited address, verified), or from the invitation the organization sends them.',
+        'Pending invitations: list_org_invitations.',
+      ],
+      source: 'jinbe:/api/organizations/:org/invitations',
+    }
+  },
+})
+
+export const orgTools: ToolDef[] = [listOrgs, getOrg, listOrgUsers, listOrgMemberRoles, listOrgInvitations] as ToolDef[]
+
+/** Org writes: invitations only (org.members:write is delegable; removing and revoking are not offered). */
+export const orgWriteTools: ToolDef[] = [inviteToOrg] as ToolDef[]
