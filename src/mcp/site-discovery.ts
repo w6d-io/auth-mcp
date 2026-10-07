@@ -46,6 +46,8 @@ export interface DiscoveredSite {
 export interface Discovery {
   /** Sites whose upstream is the Service. */
   byService: DiscoveredSite[]
+  /** Their intents, for the names in use (site-names.ts): not shown as such. */
+  intents: Array<{ name: string; site: Obj }>
   /** Sites answering on the host (from the list: no read needed). */
   byHost: Array<Pick<SiteSummary, 'name' | 'host' | 'status'>>
   /** How many sites were read for their upstream. */
@@ -117,7 +119,7 @@ export async function discover(ctx: ToolContext, opts: { ref?: ServiceRef; host?
   const all = (await ctx.jinbe.get<SiteSummary[]>(ctx.call, SITES)).filter((s) => s.name !== opts.exclude)
   const host = opts.host?.toLowerCase()
   const byHost = host ? all.filter((s) => (s.host ?? '').toLowerCase() === host).map(({ name, host: h, status }) => ({ name, host: h, status })) : []
-  const out: Discovery = { byService: [], byHost, checked: 0, truncated: false, unreadable: [] }
+  const out: Discovery = { byService: [], intents: [], byHost, checked: 0, truncated: false, unreadable: [] }
   if (!opts.ref) return out
   const ref = opts.ref
   const toRead = all.slice(0, DISCOVERY_MAX_SITES)
@@ -134,7 +136,10 @@ export async function discover(ctx: ToolContext, opts: { ref?: ServiceRef; host?
     for (const { s, site } of read) {
       if (site === undefined) { out.unreadable.push(s.name); continue }
       out.checked += 1
-      if (site && sameService(site, ref)) out.byService.push(describeSite(site, s))
+      if (site && sameService(site, ref)) {
+        out.byService.push(describeSite(site, s))
+        out.intents.push({ name: s.name, site })
+      }
     }
   }
   return out

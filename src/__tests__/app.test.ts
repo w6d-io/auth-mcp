@@ -214,6 +214,7 @@ describe('MCP over Streamable HTTP (stateless)', () => {
     expect(init.json().result.capabilities.prompts).toBeDefined()
     expect(init.json().result.instructions).toContain('docs://getting-started')
     // Ask and look before building: the intake, reuse of the sites already serving the Service, a yes.
+    expect(init.json().result.instructions).toContain('Keep names: reuse the permissions, roles and groups already used for that Service (find_sites_for_service names)')
     expect(init.json().result.instructions).toContain('Before creating or changing a site, run the intake (prompt plan_site_change): find the sites already serving that Service (find_sites_for_service) and extend one rather than create another, ask the person what they need instead of assuming, and show the plan and get a yes before the first write.')
     const list = await post(rpc('resources/list'), auth)
     expect((list.json().result.resources as Array<{ uri: string }>).map((r) => r.uri)).toContain('docs://getting-started')

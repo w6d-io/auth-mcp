@@ -54,7 +54,7 @@ export function accessChecklist(site: Record<string, unknown>, existingGroups: s
     {
       step: 'roles',
       tool: 'set_site_access',
-      why: `The site defines the roles ${roles.join(', ') || '(none)'}. Keep the preset or give your own roles and permissions.`,
+      why: `The site defines the roles ${roles.join(', ') || '(none)'}${typeof site.roles === 'string' ? ` (the ${site.roles} preset)` : ''}. Once the routes are mapped, name roles for the job instead: set_site_access roles 'from-routes' (one role per permission the routes ask), then rename each (partner, activity-reader…), reusing the names sibling sites give the same access (find_sites_for_service names). A role carries only permissions a route asks.`,
       suggested: { roles: site.roles },
     },
     {

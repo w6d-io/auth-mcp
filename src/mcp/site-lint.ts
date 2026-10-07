@@ -10,9 +10,13 @@
  * colons (one colon: resource[.sub]:verb), a required_scope on the token authenticator (the policy
  * decides, from the organization key's scopes), a secret written into a header the gateway adds.
  *
+ * And the access names (site-names.ts): roles carrying permissions no route asks, routes no role
+ * reaches, the template's roles left over routes asking others, groups not named for what they give.
+ *
  * It reads the intent defensively (a draft can be half-written) and never throws on shape.
  */
 import { isExpertGate, tokensWithoutPolicy } from './gate-presets.js'
+import { lintNames } from './site-names.js'
 
 export type LintLevel = 'high' | 'medium' | 'low'
 
@@ -158,6 +162,7 @@ export function lintSite(intent: unknown): LintFinding[] {
   }
   if (login && login.reach === 'any-account') add('any_account_reach', 'medium', 'Any account can sign in to this site, granted or not', 'login.reach')
 
+  out.push(...lintNames(intent))
   return out
 }
 

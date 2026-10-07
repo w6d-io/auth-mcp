@@ -8,6 +8,7 @@ import { ToolError, toolError } from '../../safety/errors.js'
 import { SITE_NAME } from '../../safety/untrusted.js'
 import { lintSite, summarize, type LintFinding } from '../site-lint.js'
 import { discover, DISCOVERY_MAX_SITES } from '../site-discovery.js'
+import { namesOf, siblingNameFindings } from '../site-names.js'
 import { nextStep } from '../onboarding.js'
 import { withoutActors } from './write-common.js'
 import type { BlastRadius, SiteDetail, SitePreview, SiteSummary } from '../../jinbe/types.js'
@@ -51,7 +52,7 @@ export const findSitesForService = defineTool({
   name: 'find_sites_for_service',
   title: 'Sites already serving a Service',
   description:
-    'Every site whose upstream is this in-cluster Service (service + namespace): host, status, base path, routes, gates, organizations, roles and groups. Call it before creating a site, and before changing one for a Service: when a site already serves it, extend that site instead of making another (the prompt plan_site_change walks it).',
+    'Every site whose upstream is this in-cluster Service (service + namespace): host, status, base path, routes, gates, organizations, roles and groups, and the names already in use for it (names: each route permission with the backend paths asking it, roles with what they carry, platform and org groups with their roles). Call it before creating a site, and before changing or naming anything for a Service: when a site already serves it, extend that site instead of making another, and reuse its names (the prompt plan_site_change walks it).',
   scopes: [P.SITES_READ],
   input: {
     service: z.string().regex(/^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/, 'a Service name'),
@@ -63,10 +64,12 @@ export const findSitesForService = defineTool({
     const notes: string[] = []
     if (d.byService.length) notes.push(`Already served by ${d.byService.map((x) => `'${x.name}'`).join(', ')}: extend one of these rather than creating another site; a separate site only when one cannot serve both (a different backend base path: upstream.path is site-wide).`)
     else notes.push('No site serves this Service yet: a new site is the way (create_site), once the person agreed the plan (plan_site_change).')
+    const names = namesOf(d.intents)
+    if (names.permissions.length) notes.push('Reuse these names: a route on a backend path listed in names.permissions asks that permission; a role or group for the same job keeps the name a sibling site gave it; new names follow resource[.sub]:verb, roles named for the job, groups <site>-<role>s (platform) and <site>-<role> (organization).')
     if (d.truncated) notes.push(`Only the first ${DISCOVERY_MAX_SITES} sites were read: the answer may be incomplete.`)
     if (d.unreadable.length) notes.push(`Could not read: ${d.unreadable.join(', ')}.`)
     return {
-      data: { items: d.byService, total: d.byService.length, sameHost: d.byHost, checked: d.checked, truncated: d.truncated },
+      data: { items: d.byService, total: d.byService.length, names, sameHost: d.byHost, checked: d.checked, truncated: d.truncated },
       source: `jinbe:${BASE}+${BASE}/:name`,
       notes,
     }
@@ -142,7 +145,7 @@ export const checkSiteDraft = defineTool({
   name: 'check_site_draft',
   title: 'Check a site draft',
   description:
-    "Step 3 of onboarding. Lint a Site intent (a site's draft by name, or an intent you pass) for insecure choices (public writes, public catch-all, no second factor on privileged writes, allow-all handlers, hand-built gates, open CORS, wildcard roles) and, when the key carries sites:write, run the platform preview (gatekit compile, overlaps with live rules, ties, zone and host checks) and say when another site already serves the same Service (same_upstream_as). Writes nothing.",
+    "Step 3 of onboarding. Lint a Site intent (a site's draft by name, or an intent you pass) for insecure choices (public writes, public catch-all, no second factor on privileged writes, allow-all handlers, hand-built gates, open CORS, wildcard roles, access names: roles carrying permissions no route asks, routes no role reaches, template roles left over, groups not named <site>-<role>s) and, when the key carries sites:write, run the platform preview (gatekit compile, overlaps with live rules, ties, zone and host checks), say when another site already serves the same Service (same_upstream_as) and when a route asks another permission than a sibling's route on the same backend path (name_differs_from_sibling). Writes nothing.",
   scopes: [P.SITES_READ, P.SITES_WRITE],
   input: { name: siteName.optional().describe("Check this site's draft"), site: intent.optional() },
   async run(args, ctx) {
@@ -201,6 +204,7 @@ export const checkSiteDraft = defineTool({
             message: `${upstream.service}.${upstream.namespace} is already served by ${d.byService.map((x) => `'${x.name}' (${x.host ?? 'no host'})`).join(', ')}: extend that site rather than keeping two, unless one cannot serve both (a different backend base path)`,
             path: 'upstream',
           })
+          findings.push(...siblingNameFindings(site, d.intents))
         }
       } catch (err) {
         if (!(err instanceof ToolError)) throw err

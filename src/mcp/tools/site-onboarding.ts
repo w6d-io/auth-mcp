@@ -8,6 +8,7 @@ import { nextStep } from '../onboarding.js'
 import { SITES, idempotencyKey, obj, siteName } from './write-common.js'
 import { ORGS_NOTE, lintOf, putDraft, workingSite } from './site-writes.js'
 import { withOrganizations } from '../site-templates.js'
+import { rolesFromRoutes } from '../site-names.js'
 
 /**
  * Onboarding tools that edit the draft (gates, access) and verify a published site. Gates are given by
@@ -57,12 +58,12 @@ export const setSiteAccess = defineTool({
   name: 'set_site_access',
   title: 'Design site access (draft)',
   description:
-    "Set who can do what on a site, in its draft: the roles (a preset, standard, readonly or operator, or your own role → permissions), which platform groups get which roles, and the second factor (none, writes, all). Published with the site, so it is the way to give a site's access (set_site_roles is overwritten by the next publish).",
+    "Set who can do what on a site, in its draft: the roles (a preset, standard, readonly or operator; 'from-routes', one role per permission the site's routes ask, named from it, to rename for the job; or your own role → permissions), which platform groups get which roles, and the second factor (none, writes, all). Name roles for the job and give them only permissions a route asks; groups <site>-<role>s; reuse the names sibling sites use (find_sites_for_service names). Published with the site, so it is the way to give a site's access (set_site_roles is overwritten by the next publish).",
   scopes: [P.SITES_WRITE],
   write: true,
   input: {
     name: siteName,
-    roles: z.union([z.enum(['standard', 'readonly', 'operator']), z.record(roleName, z.array(permission).max(200))]).optional(),
+    roles: z.union([z.enum(['standard', 'readonly', 'operator', 'from-routes']), z.record(roleName, z.array(permission).max(200))]).optional(),
     groups: z.record(groupKey, z.array(roleName).max(20)).optional().describe('Platform group → the roles it gets on this site, e.g. {"devs": ["editor"]}'),
     twoFactor: z.enum(['none', 'writes', 'all']).optional(),
     idempotencyKey,
@@ -74,7 +75,11 @@ export const setSiteAccess = defineTool({
     }
     const base = await workingSite(ctx, args.name)
     const site: Record<string, unknown> = { ...base.site }
-    if (args.roles !== undefined) site.roles = args.roles
+    if (args.roles === 'from-routes') {
+      const generated = rolesFromRoutes(site)
+      if (!Object.keys(generated).length) throw toolError('invalid_request', "No route of this draft asks a permission yet: map the routes first (update_site_routes, import_openapi), then roles 'from-routes'")
+      site.roles = generated
+    } else if (args.roles !== undefined) site.roles = args.roles
     if (args.groups) site.groups = { ...obj(site.groups), orgGrantable: obj(obj(site.groups).orgGrantable), platform: args.groups }
     if (args.twoFactor) {
       const login = obj(site.login)
@@ -84,7 +89,11 @@ export const setSiteAccess = defineTool({
     return {
       data: { name: args.name, roles: site.roles, groups: obj(site.groups).platform ?? {}, twoFactor: obj(obj(site.login).twoFactor).scope ?? 'none', draft, lint: lintOf(site) },
       source: `jinbe:${SITES}/:name/draft`,
-      notes: ['People: add_user_to_groups (protected); a missing group: create_group.', nextStep('access')],
+      notes: [
+        ...(args.roles === 'from-routes' ? [`Roles made from the routes: ${Object.keys(obj(site.roles)).join(', ')}. Rename each for the job (partner, activity-reader…) with set_site_access roles, keeping a name a sibling site already gives the same access (find_sites_for_service names).`] : []),
+        'People: add_user_to_groups (protected); a missing group: create_group.',
+        nextStep('access'),
+      ],
     }
   },
 })

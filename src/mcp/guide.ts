@@ -48,6 +48,13 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Let the partner Munia call GET /api/v1/earnings/days on "earning-service" from its own program.', tools: ['list_orgs', 'set_site_organizations', 'update_site_routes', 'check_site_draft', 'save_site_version', 'publish_site', 'verify_site'] },
 ]
 
+/** How permissions, roles and groups are named: once, here (site-names.ts checks it). */
+export const NAMING_CONVENTION: readonly string[] = [
+  'Permission: `resource[.sub]:verb`, exactly one colon — the backend\'s noun, the area, the verb (`earnings.external:read`, `earnings.last-activity:read`).',
+  'Role: named for the job (`partner`, `activity-reader`, `editor`), carrying only permissions a route of the site asks. `set_site_access` roles `from-routes` makes one per permission, to rename for the job.',
+  'Platform group: `<site>-<role>s` (`earnings-activity-readers`); organization group: `<site>-<role>` (`earnings-partner`). A shared group (admins, devs) keeps its own name.',
+]
+
 /**
  * Before any site write: ask, look, plan, get a yes. Two assistants once each made a site for the same
  * Service (earning-service: `earnings` and `earning-service`), set up differently, neither aware of
@@ -61,6 +68,12 @@ export const BEFORE_YOU_BUILD: readonly string[] = [
   ...INTAKE_QUESTIONS.map((q) => `- ${q}`),
   '',
   '**Reuse first.** `find_sites_for_service` lists every site already serving the Service; `create_site` refuses a second one (`existing_site_for_service`) unless `newSiteReason` says why one site cannot serve both (a different backend base path or host: `upstream.path` is site-wide). `check_site_draft` flags `same_upstream_as`. What to avoid: two sites for one backend, each configured by a different person who never saw the other.',
+  '',
+  '**Same names for the same thing.** Before naming anything, read `names` in `find_sites_for_service`: the permission each route of a sibling site asks (with the backend path it reaches), its roles and groups. A route reaching a backend path a sibling already protects asks the same permission; a role or group for the same job keeps the sibling\'s name. New names follow the convention:',
+  '',
+  ...NAMING_CONVENTION.map((c) => `- ${c}`),
+  '',
+  '`check_site_draft` flags `role_permission_unused`, `route_permission_unheld`, `template_roles_unused`, `group_name_pattern` and `name_differs_from_sibling`. What to avoid: the template\'s admin/editor/viewer/user kept over routes asking other permissions, the same access called `partner` on one site and `admin` on another, a group named `earnings-tech` that says nothing of what it gives.',
   '',
   '**Plan, then a yes.** Write the plan — which site and why, a routes table (method, path, gate, permission), an access table (who → role or organization key → permission), the second factor, what a person still does in the console — and wait for the person\'s explicit yes before the first write.',
   '',
