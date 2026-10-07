@@ -213,6 +213,8 @@ describe('MCP over Streamable HTTP (stateless)', () => {
     const init = await post(rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } }), auth)
     expect(init.json().result.capabilities.prompts).toBeDefined()
     expect(init.json().result.instructions).toContain('docs://getting-started')
+    // Ask and look before building: the intake, reuse of the sites already serving the Service, a yes.
+    expect(init.json().result.instructions).toContain('Before creating or changing a site, run the intake (prompt plan_site_change): find the sites already serving that Service (find_sites_for_service) and extend one rather than create another, ask the person what they need instead of assuming, and show the plan and get a yes before the first write.')
     const list = await post(rpc('resources/list'), auth)
     expect((list.json().result.resources as Array<{ uri: string }>).map((r) => r.uri)).toContain('docs://getting-started')
     const read = await post(rpc('resources/read', { uri: 'docs://getting-started' }), auth)
@@ -226,7 +228,7 @@ describe('MCP over Streamable HTTP (stateless)', () => {
     expect(doc.text).toMatch(/\| `publish_site` \| [^|]+ \| sites:apply \| protected write \| no \|/)
     expect(doc.text).not.toContain('simulate_grant')
     const prompts = await post(rpc('prompts/list'), auth)
-    expect((prompts.json().result.prompts as Array<{ name: string }>).map((p) => p.name)).toEqual(['getting-started', 'onboard_site'])
+    expect((prompts.json().result.prompts as Array<{ name: string }>).map((p) => p.name)).toEqual(['getting-started', 'plan_site_change', 'onboard_site'])
     const prompt = await post(rpc('prompts/get', { name: 'getting-started' }), auth)
     const message = prompt.json().result.messages[0]
     expect(message.role).toBe('user')

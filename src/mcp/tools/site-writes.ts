@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { defineTool, type ToolContext, type ToolDef } from '../registry.js'
 import { P } from '../permissions.js'
 import { seg } from '../../jinbe/client.js'
-import { toolError } from '../../safety/errors.js'
+import { ToolError, toolError } from '../../safety/errors.js'
+import { discover, reuseAdvice, type Discovery } from '../site-discovery.js'
 import { lintSite, summarize } from '../site-lint.js'
 import { buildSite, TEMPLATE_IDS, withOrganizations } from '../site-templates.js'
 import { buildExpertGate, buildGate, expertGate, presetGate } from '../gate-presets.js'
@@ -105,7 +106,7 @@ export const createSite = defineTool({
   name: 'create_site',
   title: 'Create a site (draft)',
   description:
-    "Step 1 of onboarding: start a new site as a draft from a template (web-api, app, api, spa-api, public, empty): address, upstream Service (optionally a base path), gates, a catch-all and standard roles; organizations: true also turns organizations on. Gates may be replaced by preset (who, pass, gets, fails); raw handlers only through expert_gate. Returns the access checklist for step 2. Refused when the site or a draft already exists. Nothing is live until it is saved and published.",
+    "Step 1 of onboarding: start a new site as a draft from a template (web-api, app, api, spa-api, public, empty): address, upstream Service (optionally a base path), gates, a catch-all and standard roles; organizations: true also turns organizations on. Gates may be replaced by preset (who, pass, gets, fails); raw handlers only through expert_gate. Returns the access checklist for step 2. Refused when the site or a draft already exists, and when another site already serves the same Service or host (existing_site_for_service: extend that one, or give newSiteReason). Run the intake first (prompt plan_site_change). Nothing is live until it is saved and published.",
   scopes: WRITE_SCOPES,
   write: true,
   input: {
@@ -136,12 +137,32 @@ export const createSite = defineTool({
     gates: z.array(presetGate).max(20).optional().describe("Replace or add the template's gates, by id, as presets"),
     ephemeral: ephemeral.optional().describe('{ttl?}: make it an ephemeral site (paused, never deleted, when the TTL passes; 1 hour to 7 days, 24 h by default). The expiry starts at the first save: pass the same to save_site_version'),
     expert_gate: expertGate.optional().describe('One hand-built gate, only when no preset fits (flagged by check_site_draft)'),
+    newSiteReason: z
+      .string()
+      .min(20)
+      .max(280)
+      .optional()
+      .describe('Only when another site already serves this Service or host: why it cannot be extended instead (e.g. a different backend base path, upstream.path being site-wide). Pass it as the note of save_site_version too'),
     idempotencyKey,
   },
   async run(args, ctx) {
     const [draft, saved] = await Promise.all([draftOf(ctx, args.name), savedSite(ctx, args.name)])
     if (saved || draft) {
       throw toolError('conflict', `A site or draft named ${args.name} already exists: edit it (update_site_routes, save_site_draft) instead`)
+    }
+    // Reuse first: a Service or host somebody already exposes is extended, not exposed twice.
+    const ref = { service: args.upstream.service, namespace: args.upstream.namespace }
+    let found: Discovery | null = null
+    let unchecked: string | null = null
+    try {
+      found = await discover(ctx, { ref, host: args.host })
+    } catch (err) {
+      if (!(err instanceof ToolError)) throw err
+      unchecked = err.body.code === 'not_found' ? null : `Existing sites could not be checked (${err.body.code}): look with list_sites before saving.`
+    }
+    const alongside = found ? [...found.byService.map((s) => ({ name: s.name, host: s.host, status: s.status, why: 'same Service', routes: s.routes.total, organizations: s.organizations.enabled })), ...found.byHost.filter((h) => !found!.byService.some((s) => s.name === h.name)).map((h) => ({ name: h.name, host: h.host, status: h.status, why: 'same host' }))] : []
+    if (alongside.length && !args.newSiteReason) {
+      throw toolError('existing_site_for_service', `Not created: ${reuseAdvice(found!, ref)}`, { details: { sites: alongside, ...(found!.truncated ? { truncated: true } : {}) } })
     }
     const { path: upstreamPath, ...upstream } = args.upstream
     let site = buildSite(args.template, {
@@ -175,10 +196,13 @@ export const createSite = defineTool({
         accessChecklist: accessChecklist(site, existing),
         ...(orgs ? { organizations: { added: orgs.added, problems: orgs.problems } } : {}),
         ...(args.ephemeral ? { ephemeral: { requested: args.ephemeral, startsAt: 'first save (save_site_version with the same ephemeral)' } } : {}),
+        ...(alongside.length ? { newSiteReason: args.newSiteReason, alongside } : {}),
       },
       source: `jinbe:${SITES}/:name/draft`,
       notes: [
         'Draft only: nothing is live.',
+        ...(alongside.length ? [`A separate site beside ${alongside.map((e) => `'${e.name}'`).join(', ')}, because: ${args.newSiteReason}. Tell the person, and pass this reason as the note of save_site_version.`] : []),
+        ...(unchecked ? [unchecked] : []),
         ...(orgs ? [ORGS_NOTE] : []),
         ...(args.ephemeral ? [`Ephemeral: pass ephemeral ${JSON.stringify(args.ephemeral)} to save_site_version; the expiry counts from that save, and the site is paused (not deleted) when it passes.`] : []),
         nextStep('create'),

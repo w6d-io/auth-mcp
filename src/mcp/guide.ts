@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { AuthenticatedPrincipal } from '../auth/types.js'
 import { isVisible, type ToolDeps, type ToolDef } from './registry.js'
 import { P } from './permissions.js'
+import { INTAKE_QUESTIONS } from './prompts.js'
 
 /**
  * The getting-started guide, served over MCP itself: the resource `docs://getting-started` and the
@@ -26,6 +27,7 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Where is a second factor required on this platform?', tools: ['get_second_factor_map'] },
   { ask: 'Why can\'t I list the members of my organisation?', tools: ['list_orgs', 'explain_admin_access'] },
   { ask: 'List the sites and tell me which ones need attention.', tools: ['list_sites'] },
+  { ask: 'Which sites already serve the Service earning-service in namespace stairling?', tools: ['find_sites_for_service'] },
   { ask: 'Show the site "billing" and its version history.', tools: ['get_site', 'site_versions'] },
   { ask: 'What would break if the site "shop" went down?', tools: ['blast_radius'] },
   { ask: 'Explain access for alice@example.com to GET /api/billing/invoices.', tools: ['explain_access'] },
@@ -44,6 +46,24 @@ export const EXAMPLES: ReadonlyArray<{ ask: string; tools: string[] }> = [
   { ask: 'Make my site "shop" org-aware, and invite dave@example.com as a member of my organisation there.', tools: ['set_site_organizations', 'save_site_version', 'publish_site', 'get_org', 'invite_to_org'] },
   { ask: 'Who has been invited into my organisation and not joined yet?', tools: ['list_orgs', 'list_org_invitations'] },
   { ask: 'Let the partner Munia call GET /api/v1/earnings/days on "earning-service" from its own program.', tools: ['list_orgs', 'set_site_organizations', 'update_site_routes', 'check_site_draft', 'save_site_version', 'publish_site', 'verify_site'] },
+]
+
+/**
+ * Before any site write: ask, look, plan, get a yes. Two assistants once each made a site for the same
+ * Service (earning-service: `earnings` and `earning-service`), set up differently, neither aware of
+ * the other — what this section is for.
+ */
+export const BEFORE_YOU_BUILD: readonly string[] = [
+  '## Before you build',
+  '',
+  'Before creating or changing a site, run the intake with the person (the prompt `plan_site_change`). Ask, one topic at a time, and never answer for them:',
+  '',
+  ...INTAKE_QUESTIONS.map((q) => `- ${q}`),
+  '',
+  '**Reuse first.** `find_sites_for_service` lists every site already serving the Service; `create_site` refuses a second one (`existing_site_for_service`) unless `newSiteReason` says why one site cannot serve both (a different backend base path or host: `upstream.path` is site-wide). `check_site_draft` flags `same_upstream_as`. What to avoid: two sites for one backend, each configured by a different person who never saw the other.',
+  '',
+  '**Plan, then a yes.** Write the plan — which site and why, a routes table (method, path, gate, permission), an access table (who → role or organization key → permission), the second factor, what a person still does in the console — and wait for the person\'s explicit yes before the first write.',
+  '',
 ]
 
 /** Step-by-step write recipes: the tools in order, and what to check between them. */
@@ -84,8 +104,9 @@ export const RECIPES: ReadonlyArray<{ title: string; steps: string[]; tools: str
   },
   {
     title: 'Onboard a site securely (the prompt onboard_site walks it)',
-    tools: ['create_site', 'set_site_access', 'create_group', 'add_user_to_groups', 'check_site_draft', 'save_site_version', 'can_i', 'publish_site', 'verify_site'],
+    tools: ['find_sites_for_service', 'create_site', 'set_site_access', 'create_group', 'add_user_to_groups', 'check_site_draft', 'save_site_version', 'can_i', 'publish_site', 'verify_site'],
     steps: [
+      '**Intake:** the questions of "Before you build", `find_sites_for_service` for the upstream (extend an existing site rather than adding one), the plan, the person\'s yes.',
       '**Create:** `create_site` with a template; gates by preset (who, pass, gets, fails), `expert_gate` only when no preset fits (flagged).',
       '**Design access:** follow the `accessChecklist` it returns: `set_site_access` (roles, groups → roles, second factor), `create_group`, `add_user_to_groups`.',
       '**Check:** `check_site_draft` with the site name. Fix high findings; show the person each finding marked confirm.',
@@ -250,6 +271,7 @@ export function gettingStarted(tools: readonly ToolDef[], principal: Authenticat
     '',
     ...examples,
     '',
+    ...(names.has('find_sites_for_service') ? BEFORE_YOU_BUILD : []),
     '## Writing',
     '',
     'A key does what its holder can do, directly: drafts, imports, saved versions, invitations, recovery and sign-in emails, verification emails, bulk plans. Every write is decided again by the platform on the call, sends an idempotency key (retrying with the same `idempotencyKey` changes things once) and is audited as made through MCP.',

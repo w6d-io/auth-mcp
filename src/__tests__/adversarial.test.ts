@@ -132,7 +132,7 @@ describe('#8 output leak scan', () => {
     },
   }) as never
   const argsFor: Record<string, Record<string, unknown>> = {
-    get_site: { name: 'leaky' }, site_versions: { name: 'leaky' }, blast_radius: { name: 'leaky' },
+    get_site: { name: 'leaky' }, find_sites_for_service: { service: 'leaky', namespace: 'leaky' }, site_versions: { name: 'leaky' }, blast_radius: { name: 'leaky' },
     check_site_draft: { site: obj }, match_request: { method: 'GET', url: 'https://a.example.com/', against: 'live' },
     render_template: { template: leak, kind: 'header', sample: { method: 'GET', url: 'https://a.example.com/' } },
     list_roles: { service: 'leaky' }, get_permission_catalog: { service: 'leaky' },

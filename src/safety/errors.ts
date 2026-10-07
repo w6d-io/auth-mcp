@@ -36,6 +36,7 @@ export type ToolErrorCode =
   | 'needs_2fa'
   | 'mfa_required'
   | 'staff_group_super_admin_only'
+  | 'existing_site_for_service'
   | 'internal_error'
 
 export interface ToolErrorBody {
@@ -87,6 +88,8 @@ const HINTS: Partial<Record<ToolErrorCode, string>> = {
   grant_exceeds_own:
     'You may only hand out what you hold yourself. details.missing lists what this grant exceeds, details.grantedBy the groups that hold it: ask an administrator.',
   staff_group_super_admin_only: 'Staff groups and super_admins are changed by a super admin only. Ask one; do not retry.',
+  existing_site_for_service:
+    'Not created: details.sites already serve this Service or host. Show them to the person and extend one (update_site_routes, set_site_access, set_site_organizations); create a separate site only with newSiteReason, when one truly cannot serve both (a different backend base path or host).',
   route_not_declared:
     'Likely a version mismatch between this MCP server and the platform, or a route not deployed yet. Not a permanent ban: tell the person, and retry after the platform is updated.',
   unconfirmed_findings:

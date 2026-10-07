@@ -6,7 +6,8 @@ import { seg } from '../../jinbe/client.js'
 import { paginate, MAX_LIMIT } from '../../safety/pagination.js'
 import { ToolError, toolError } from '../../safety/errors.js'
 import { SITE_NAME } from '../../safety/untrusted.js'
-import { lintSite, summarize } from '../site-lint.js'
+import { lintSite, summarize, type LintFinding } from '../site-lint.js'
+import { discover, DISCOVERY_MAX_SITES } from '../site-discovery.js'
 import { nextStep } from '../onboarding.js'
 import { withoutActors } from './write-common.js'
 import type { BlastRadius, SiteDetail, SitePreview, SiteSummary } from '../../jinbe/types.js'
@@ -41,6 +42,34 @@ export const listSites = defineTool({
       .map(({ appliedBy: _by, draft, ...s }) => ({ ...s, ...(draft ? { draftAt: draft.at } : {}) }))
     const p = paginate(rows, { limit: args.limit, cursor: args.cursor, query: `list_sites:${args.status ?? ''}:${q ?? ''}` })
     return { data: { items: p.items, total: p.total }, nextCursor: p.nextCursor, source: `jinbe:${BASE}` }
+  },
+})
+
+const k8sName = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/
+
+export const findSitesForService = defineTool({
+  name: 'find_sites_for_service',
+  title: 'Sites already serving a Service',
+  description:
+    'Every site whose upstream is this in-cluster Service (service + namespace): host, status, base path, routes, gates, organizations, roles and groups. Call it before creating a site, and before changing one for a Service: when a site already serves it, extend that site instead of making another (the prompt plan_site_change walks it).',
+  scopes: [P.SITES_READ],
+  input: {
+    service: z.string().regex(/^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/, 'a Service name'),
+    namespace: z.string().regex(k8sName, 'a namespace'),
+    host: z.string().max(253).optional().describe('Also the sites answering on this host'),
+  },
+  async run(args, ctx) {
+    const d = await discover(ctx, { ref: { service: args.service, namespace: args.namespace }, host: args.host?.toLowerCase() })
+    const notes: string[] = []
+    if (d.byService.length) notes.push(`Already served by ${d.byService.map((x) => `'${x.name}'`).join(', ')}: extend one of these rather than creating another site; a separate site only when one cannot serve both (a different backend base path: upstream.path is site-wide).`)
+    else notes.push('No site serves this Service yet: a new site is the way (create_site), once the person agreed the plan (plan_site_change).')
+    if (d.truncated) notes.push(`Only the first ${DISCOVERY_MAX_SITES} sites were read: the answer may be incomplete.`)
+    if (d.unreadable.length) notes.push(`Could not read: ${d.unreadable.join(', ')}.`)
+    return {
+      data: { items: d.byService, total: d.byService.length, sameHost: d.byHost, checked: d.checked, truncated: d.truncated },
+      source: `jinbe:${BASE}+${BASE}/:name`,
+      notes,
+    }
   },
 })
 
@@ -113,17 +142,17 @@ export const checkSiteDraft = defineTool({
   name: 'check_site_draft',
   title: 'Check a site draft',
   description:
-    "Step 3 of onboarding. Lint a Site intent (a site's draft by name, or an intent you pass) for insecure choices (public writes, public catch-all, no second factor on privileged writes, allow-all handlers, hand-built gates, open CORS, wildcard roles) and, when the key carries sites:write, run the platform preview (gatekit compile, overlaps with live rules, ties, zone and host checks). Writes nothing.",
+    "Step 3 of onboarding. Lint a Site intent (a site's draft by name, or an intent you pass) for insecure choices (public writes, public catch-all, no second factor on privileged writes, allow-all handlers, hand-built gates, open CORS, wildcard roles) and, when the key carries sites:write, run the platform preview (gatekit compile, overlaps with live rules, ties, zone and host checks) and say when another site already serves the same Service (same_upstream_as). Writes nothing.",
   scopes: [P.SITES_READ, P.SITES_WRITE],
   input: { name: siteName.optional().describe("Check this site's draft"), site: intent.optional() },
-  async run(args, { jinbe, call, principal }) {
+  async run(args, ctx) {
+    const { jinbe, call, principal } = ctx
     let site = args.site
     if (!site) {
       if (!args.name) throw toolError('invalid_request', 'Pass a site name (its draft is checked) or a site intent')
       site = (await jinbe.get<{ site: Record<string, unknown> }>(call, `${BASE}/${seg(args.name)}/draft`)).site
     }
-    const findings = lintSite(site)
-    const lint = { findings, summary: summarize(findings) }
+    const findings: LintFinding[] = lintSite(site)
     const notes: string[] = []
     let preview: unknown = null
     // Preview is behind sites:write in jinbe; never send a call the token cannot carry.
@@ -158,6 +187,27 @@ export const checkSiteDraft = defineTool({
     } else {
       notes.push('Platform preview skipped: it needs sites:write, which this key does not carry. Lint only.')
     }
+    // Another site serving the same Service: the person should know before saving a second one (read
+    // with the preview, so a lint-only key stays a local lint).
+    const upstream = (site.upstream ?? {}) as Record<string, unknown>
+    if (hasScope(principal.scopes, P.SITES_WRITE) && typeof upstream.service === 'string' && typeof upstream.namespace === 'string') {
+      try {
+        const own = typeof site.name === 'string' ? site.name : args.name
+        const d = await discover(ctx, { ref: { service: upstream.service, namespace: upstream.namespace }, exclude: own })
+        if (d.byService.length) {
+          findings.push({
+            code: 'same_upstream_as',
+            level: 'medium',
+            message: `${upstream.service}.${upstream.namespace} is already served by ${d.byService.map((x) => `'${x.name}' (${x.host ?? 'no host'})`).join(', ')}: extend that site rather than keeping two, unless one cannot serve both (a different backend base path)`,
+            path: 'upstream',
+          })
+        }
+      } catch (err) {
+        if (!(err instanceof ToolError)) throw err
+        if (err.body.code !== 'not_found') notes.push(`Other sites on the same Service could not be checked (${err.body.code}).`)
+      }
+    }
+    const lint = { findings, summary: summarize(findings) }
     notes.push(nextStep('check'))
     return { data: { lint, preview }, source: 'auth-mcp:site-lint+jinbe:/api/admin/sites/preview', notes }
   },
@@ -205,4 +255,4 @@ export const renderTemplate = defineTool({
   },
 })
 
-export const siteTools: ToolDef[] = [listSites, getSite, siteVersions, blastRadius, getPlatform, checkSiteDraft, matchRequest, renderTemplate] as ToolDef[]
+export const siteTools: ToolDef[] = [listSites, findSitesForService, getSite, siteVersions, blastRadius, getPlatform, checkSiteDraft, matchRequest, renderTemplate] as ToolDef[]
