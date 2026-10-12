@@ -16,7 +16,7 @@ import { lintOf, putDraft, workingSite } from './site-writes.js'
 const roleName = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/)
 const domain = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/, 'a domain like example.com')
 
-type SignUp = { mode: 'closed' | 'open' | 'domains'; domains: string[]; roles: string[]; orgs: 'personal' | 'domain' | 'invite' | 'none' }
+type SignUp = { mode: 'closed' | 'open' | 'domains'; domains: string[]; roles: string[]; orgs: 'personal' | 'domain' | 'invite' | 'none'; groups?: string[] }
 
 /** Role presets as jinbe expands them (render.ts expandRoles, rbac-defaults.ts). */
 export function rolePermissions(site: Record<string, unknown>): Record<string, string[]> {
@@ -62,7 +62,7 @@ export const setSiteSignUp = defineTool({
   name: 'set_site_signup',
   title: 'Set site sign-up (draft)',
   description:
-    "Public sign-up through a site, in its draft: who may create an account from its sign-in page (mode closed, open, or domains with a list), the site roles they get (the <site>-users group; `user` in the standard set), and the organization they land in (personal: their own; domain: the org that proved the email domain; invite: none until invited; none, the default while the site has organizations off: the others need set_site_organizations first). People join once their address is verified. Publishing a version that opens or widens it needs sites.signup:write on top of the publish (a person, second factor in a browser); closing or narrowing does not.",
+    "Public sign-up through a site, in its draft: who may create an account from its sign-in page (mode closed, open, or domains with a list), the site roles they get (the <site>-users group; `user` in the standard set), and the organization they land in (personal: their own; domain: the org that proved the email domain; invite: none until invited; none, the default while the site has organizations off: the others need set_site_organizations first), and existing groups they also join (groups: giving roles on sites only, e.g. an onboarding group opening several sites; never a staff group or a platform role — jinbe refuses those, and publishing asks to confirm sign_up_groups). People join once their address is verified. Publishing a version that opens or widens it needs sites.signup:write on top of the publish (a person, second factor in a browser); closing or narrowing does not.",
   scopes: [P.SITES_WRITE],
   write: true,
   input: {
@@ -71,10 +71,11 @@ export const setSiteSignUp = defineTool({
     domains: z.array(domain).max(100).optional(),
     roles: z.array(roleName).max(20).optional(),
     orgs: z.enum(['personal', 'domain', 'invite', 'none']).optional(),
+    groups: z.array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/)).max(10).optional().describe('Existing groups (list_groups) every newcomer also joins; [] removes them'),
     idempotencyKey,
   },
   async run(args, ctx) {
-    if (!args.mode && !args.domains && !args.roles && !args.orgs) throw toolError('invalid_request', 'Nothing to change')
+    if (!args.mode && !args.domains && !args.roles && !args.orgs && !args.groups) throw toolError('invalid_request', 'Nothing to change')
     const base = await workingSite(ctx, args.name)
     const roles = rolePermissions(base.site)
     const current = obj(base.site.signUp) as Partial<SignUp>
@@ -84,6 +85,7 @@ export const setSiteSignUp = defineTool({
       roles: args.roles ?? current.roles ?? (roles.user ? ['user'] : roles.viewer ? ['viewer'] : []),
       // An organization to land in needs organizations on (jinbe refuses organizations_off): none without.
       orgs: args.orgs ?? current.orgs ?? (obj(base.site.organizations).enabled === true ? 'personal' : 'none'),
+      groups: args.groups ?? current.groups ?? [],
     }
     const unknown = signUp.roles.filter((r) => !roles[r])
     if (unknown.length) throw toolError('invalid_request', `The site defines no role ${unknown.join(', ')} (it has ${Object.keys(roles).join(', ') || 'none'})`)
